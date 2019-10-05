@@ -1,0 +1,24 @@
+name pinwheel
+offset 2.0 0.0 0.0 #point offset to global coordinates
+velocity 0.0 0.0 0.0 #initial velocity of object
+orient 0.0 1.0 1.0 1.0 #angle axis notiation, converted to rotor quaternion
+spin 0.0 0.0 0.0 1.0 #angle axis notation, angle per centisecond
+# point list with local coordinates and RGB for each vertex, and smoothing flag
+points 12
+1  0.0 -1.0  0.0  150  0  0  0
+2  0.0 -1.5  1.0  150  0  0  0
+3 -0.5  1.0  0.5  255  0  0  0
+4  0.0  0.0  1.0  0  150  0  0
+5  0.0  1.0  1.5  0  150  0  0
+6 -0.5  0.5 -1.0  0  255  0  0
+7  0.0  1.0  0.0  0  0  150  0
+8  0.0  1.5 -1.0  0  0  150  0
+9 -0.5 -1.0 -0.5  0  0  255  0
+10  0.0  0.0 -1.0  150  150  0  0
+11  0.0 -1.0 -1.5  150  150  0  0
+12 -0.5 -0.5  1.0  255  255  0  0
+triangles 4
+1 2 3
+4 5 6
+7 8 9
+10 11 12

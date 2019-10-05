@@ -1,0 +1,40 @@
+# screen data file
+fbpath	/dev/fb0	#framebuffer device path
+width	1440	#resolution of framebuffer
+height	900	# this can be found with the "fbset" command
+linelength	1472	#the actual line length typically is longer than width
+tmpdir	/tmp		#temporary directory
+#FOV	1.74533 1.5708	# x and y field of view in radian (100, 90) degrees
+FOV	1.5708 1.41372	# x and y field of view in radian (90, 81) degrees
+subscreen 100 200  550 700 #pixel ranges, top-left and bottom right, (row column)
+#mode	solid		# initial render mode
+camera_pos	0.0 0.0 0.0	#camera position in global space
+camera_orient	0.0 1.0 1.0 1.0	#angle, axis(3) notation, from X-axis.
+dumpFile	dmp	# basename to dump render view to PPM files
+timeout		150	# number of steps to run interactive renderer
+
+# celestial sphere data
+starfile	stars.dat
+Nstars	300
+
+interactive		# use curser keys to change camera position and orientation (comment to render scene)
+timestep	0.01	# seconds to wait for each time step check
+dtheta	0.261799	# angular increment for camera rotation
+dspace	1.0		# translational increment for motion of camera
+
+NobjectBuff 2	# number of objects to allocate for
+LoadObject objFiles/space_station.obj
+o 1 offset 20.0 2.0 -2.0 # offset
+o 1 mode solid
+o 1 spin 0.05 0.0 0.0 1.0 #slow spin
+
+LoadObject objFiles/x_wing.obj
+o 2 mode solid
+o 2 scale 0.5		# scale this down a bit
+o 2 offset 15.0 20.0 5.0 #set initial position
+o 2 spin 0.0 0.0 0.0 1.0 # stop spin
+o 2 velocity 0.0 -0.01 0.0 # travel in positive Y (left to right?)
+
+run	# begin local animation (i.e. allow objects their motion)
+record  # record the images to make movie
+

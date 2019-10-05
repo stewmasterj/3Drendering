@@ -1,0 +1,18 @@
+name orderTest
+offset 2.0 0.0 0.0 #point offset to global coordinates
+velocity 0.0 0.0 0.0 #initial velocity of object
+orient 0.0 1.0 1.0 1.0 #angle axis notiation, converted to rotor quaternion
+spin 0.0 0.0 0.0 1.0 #angle axis notation, angle per centisecond
+# point list with local coordinates and RGB for each vertex, and smoothing flag
+points 6
+1  0.0 -1.0  1.0  10  10  10  0
+2  0.0 -1.0 -1.0  10  10  10  0
+3  0.0  1.0  0.0  255  0  0  0
+4 -0.1  0.66  0.0  0  255  0  0
+5 -0.2  0.33  0.0  0  0  255  0
+6 -0.3  0.0  0.0  255  255  0  0
+triangles 4
+1 2 6
+1 2 5
+1 2 4
+1 2 3
