@@ -44,59 +44,111 @@ These commands can also be used in the `scene.rc` files to setup the initial sce
 Commands that take parameters show their values when executed sans parms  
 
 ### Command Parameters  Description  
- help               Displays this help message  
- q,quit,exit        terminates the program  
- fbpath F           path to framebuffer device, must have write permissions  
- dumpfile F         path for dump file for keyboard screenshots  
- tmpdir F           path to a temporary directory for scratch files  
- interactive        puts program into interactive rather than single render  
- contact N          calculates contact conditions for dynamic objects; N is the  
-                     type of contact algorithm, 0=off, 1=elastic-Frictionless  
- FOV x y            field of view angles (radians)  
- subscreen x1 y1 x2 y2 pixel ranges, top-left and bottom right, (row column)  
- timestep r         time between frames for animation  
- dtheta r           angle change for key press  
- dspace r           distance increment for key press  
- width n            pixel width of screen  
- height n           pixel height of screen  
- timeout n          animation steps to run  
- linelength N       frame buffer line length Bytes  
- NobjectBuff N      allocate the object buffer to this many objects.  
-                     WARNING will delete all existing objects  
- LoadObject FILE    will load object from file FILE  
- camera_pos x y z   location of camera  
- camera_orient a u v w  angle-axis orientation of camera  
- universe c x y z   set a universal shape (c=box|sphere), size parameters  
- periodic           sets the universal size to be periodic else will rebound  
- fbclear            clear the pixel buffer  
- redraw             writes the current pixel buffer to the frame buffer  
- pause              stops rendering animation  
- run                resumes rendering animation  
- picture            take a screen shot  
- record             toggle recording mode (video)  
- impulseControl     set input key mode to impulse  
- spatialControl     set input key mode to spatial  
- cpo I J (K)        copy object ID I to J (through K)  
- nearest,closest    reports the nearest vertex relative sph position and obj  
- underAim           reports the obj, tri, and node at center of screen  
- o I c              object ID 'I' definition 'c'  
-    object command 'c' can be:  
-     save s          save this object as file name 's'  
-     name s          set name of object 'I'  
-     mode s          set render mode of object 'I', (point|wire|solid)  
-     mass r          set object's total mass (for collision)  
-     radius r        set object's average radius (for contact)  
-     offset x y z    set position offset of object 'I'  
-     velocity u v w  set velocity of object 'I'  
-     orient a u v w  set angle and rotation axis of object 'I'  
-     spin a u v w    set angle rate and rotation axis of object 'I'  
-     scale r         scale all local positions of object 'I' by multiple 'r'  
-     add J           add a node to triangle J of object 'I', default J=underAIM  
-     point J x y z   set local position of point 'J' in object 'I'  
-     disp J u v w    displace local position of point 'J' in object 'I'  
-     color J r g b   set color of point 'J' in object 'I' (J=0 for all points)  
-     smooth J k      set smoothness of point J in object I (J=0 for all points)   
- orand c i j  v(:)   randomizes objects i-j property 'c' with ranges v(:)  
+| help         |      Displays this help message | 
+|:-------------|:--------------------------------|
+|` q,quit,exit       ` |terminates the program|  
+|` fbpath F          ` |path to framebuffer device, must have write permissions|  
+|` dumpfile F        ` |path for dump file for keyboard screenshots|  
+|` tmpdir F          ` |path to a temporary directory for scratch files|  
+|` interactive       ` |puts program into interactive rather than single render|  
+|` contact N         ` |calculates contact conditions for dynamic objects; N is the|  
+|`                   ` | type of contact algorithm, 0=off, 1=elastic-Frictionless|  
+|` FOV x y           ` |field of view angles (radians)|  
+|` subscreen x1 y1 x2 y2` |pixel ranges, top-left and bottom right, (row column)|  
+|` timestep r        ` |time between frames for animation|  
+|` dtheta r          ` |angle change for key press|  
+|` dspace r          ` |distance increment for key press|  
+|` width n           ` |pixel width of screen|  
+|` height n          ` |pixel height of screen|  
+|` timeout n         ` |animation steps to run|  
+|` linelength N      ` |frame buffer line length Bytes|  
+|` NobjectBuff N     ` |allocate the object buffer to this many objects.|  
+|`                   ` | WARNING will delete all existing objects|  
+|` LoadObject FILE   ` |will load object from file FILE|  
+|` camera_pos x y z  ` |location of camera|  
+|` camera_orient a u v w`  |angle-axis orientation of camera|  
+|` universe c x y z  ` |set a universal shape (c=box|sphere), size parameters|  
+|` periodic          ` |sets the universal size to be periodic else will rebound|  
+|` fbclear           ` |clear the pixel buffer|  
+|` redraw            ` |writes the current pixel buffer to the frame buffer|  
+|` pause             ` |stops rendering animation|  
+|` run               ` |resumes rendering animation|  
+|` picture           ` |take a screen shot|  
+|` record            ` |toggle recording mode (video)|  
+|` impulseControl    ` |set input key mode to impulse|  
+|` spatialControl    ` |set input key mode to spatial|  
+|` cpo I J (K)       ` |copy object ID I to J (through K)|  
+|` nearest,closest   ` |reports the nearest vertex relative sph position and obj|  
+|` underAim          ` |reports the obj, tri, and node at center of screen|  
+|` o I c             ` |object ID 'I' definition 'c'|  
+|    |object command 'c' can be:|  
+|`     save s        ` | save this object as file name 's'|  
+|`     name s        ` | set name of object 'I'|  
+|`     mode s        ` | set render mode of object 'I', (point|wire|solid)|  
+|`     mass r        ` | set object's total mass (for collision)|  
+|`     radius r      ` | set object's average radius (for contact)|  
+|`     offset x y z  ` | set position offset of object 'I'|  
+|`     velocity u v w` | set velocity of object 'I'|  
+|`     orient a u v w` | set angle and rotation axis of object 'I'|  
+|`     spin a u v w  ` | set angle rate and rotation axis of object 'I'|  
+|`     scale r       ` | scale all local positions of object 'I' by multiple 'r'|  
+|`     add J         ` | add a node to triangle J of object 'I', default J=underAIM|  
+|`     point J x y z ` | set local position of point 'J' in object 'I'|  
+|`     disp J u v w  ` | displace local position of point 'J' in object 'I'|  
+|`     color J r g b ` | set color of point 'J' in object 'I' (J=0 for all points)|  
+|`     smooth J k    ` | set smoothness of point J in object I (J=0 for all points)|   
+|` orand c i j  v(:) ` | randomizes objects i-j property 'c' with ranges v(:)|  
 
 
+# Future Work
+
+## FEATURES:
+
+- differnent light source direction  
+
+- transfer  frictional torque  
+	i.e. no translational friction  
+	i.e. rotation axis = contact vector  
+
+- auto-orientation i.e. auto-pilot  
+
+- editing objects  
+	select node under Aim  [done]    
+	provide its attributes or provide relative displacemnts, etc.    
+
+- custom Heads Up Display (HUD)  
+
+## GAMES/APPLICATIONS:
+
+- 3D asteroids  
+	impulse controls [done]   
+	explosion mechanics  (object spawn) [doneish]  
+	scoreing [kinda, shows Nobjects and quites when =0]  
+	radar [kinda]  
+	contact damage [just die]  
+	relative PBCs [done]  
+
+- billiards/snooker  
+	3D physics  
+	box rebounds  
+	felt rolling friction  
+
+- Winding Road  
+	progressively tortuous road  
+	drive off road=crash  
+	driving mechanics  
+	requires random trees progressively getting wilder  
+
+- fbpaint  [done part of fbMod2.f90]  
+	2D image editor  
+	simple geometries  
+	wrapper for converting image formats  
+
+- object editor  
+	rotate object not camera  
+	more intuitive attribute control  
+	save objects [done]  
+	subdivide triangles [done]  
+	delete nodes and triangles  
+	
 
