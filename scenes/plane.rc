@@ -1,0 +1,62 @@
+#!../view -s 
+# vim: syntax=sh
+# screen data file
+fbpath	/dev/fb0	#framebuffer device path
+width	1440	#resolution of framebuffer
+height	900	# this can be found with the "fbset" command
+linelength	1472	#the actual line length typically is longer than width
+tmpdir	/tmp		#temporary directory
+FOV	1.5708 1.41372	# x and y field of view in radian (90, 81) degrees
+#FOV	0.39   0.36	# x and y field of view in radian (22, 20) degrees
+subscreen 100 200  550 700 #pixel ranges, top-left and bottom right, (row column)
+cam pos	0.0 0.0 1.0	#camera position in global space
+cam orient	0.0 1.0 1.0 1.0	#angle, axis(3) notation, from X-axis.
+
+# celestial sphere data
+#starfile	../stars.dat
+#Nstars	300
+
+interactive	# curser keys for camera position and orientation (comment to render scene)
+timestep 0.01	# seconds to wait for each time step check
+impulseControl	# key strokes increment velocity and angle rate
+dtheta	0.01	# angular increment for camera rotation
+dspace	0.05	# translational increment for motion of camera
+
+#############
+#contact 1	# activate contact detection (0=off, 1=elastic-frictionless, 2=elastic-frictional)
+
+#universe box 50.0 50.0 50.0
+#universe sphere 86.61 #circumscribes a 50x50x50 box 
+#periodic	# set universe box to be periodic
+
+NobjectBuff 1	# number of objects to allocate for
+#LoadBackground ../objFiles/stars.obj
+LoadBackground ../objFiles/bgLabels.obj
+
+#LoadObject ../objFiles/plane.obj
+LoadObject ../objFiles/perlinPlane.obj
+#o 1 mode solid
+#o 1 mass  0.00001
+#o 1 scale 0.5
+#o 1 offset 15.0 0.0 0.0 # offset
+#o 1 spin 0.04   0.0 1.0 -1.0 #slow spin
+#o 1 velocity 0.0 0.0 0.0
+#o 1 color 0   255 255 255 
+#o 1 stiffness 4000.0
+o 1 smooth 0 0 #set all to sharp
+o 1 smooth 0 1 # set all to smooth
+
+#cpo 1  2 20 #copy object 1 to everything from 2 to 20
+
+# randomize parameters of the 20 objects
+#seed  34
+#orand offset 1 20  -50.0 50.0  -50.0 50.0  -50.0 50.0
+#orand velocity 1 20  -20.0 20.0  -20.0 20.0  -20.0 20.0
+#orand spin 1 20  -0.05 0.05   0.0 1.0  0.0 1.0  0.0 1.0
+
+dumpFile	dmp	# basename to dump render view to PPM files
+#timeout		150	# number of steps to run interactive renderer
+
+run	# begin local animation (i.e. allow objects their motion)
+#record  # record the images to make movie
+

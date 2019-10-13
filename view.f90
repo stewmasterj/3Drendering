@@ -360,18 +360,19 @@ do i = 1, Nobjects
  rv = r(1)*v(1) + r(2)*v(2) + r(3)*v(3) 
 
  ! time to minimum distance
- if (v2.lt.1.e-6) then; XY(2,i) = 0.0
- else;                  XY(2,i) = -rv/v2; endif
+ if (v2.lt.1.e-6) then; XY(1:2,i) = 0.0
+ else;                  XY(2,i) = -rv/v2
  ! (4ac-b*b)/(4a) !min value of quadratic
- XY(1,i) = (v2*r2 -rv*rv)/v2
+   XY(1,i) = (v2*r2 -rv*rv)/v2
+ endif
  ! minimum distance; if this argument is negative it is a collision
- if (XY(1,i).le.0.0) then; XY(1,i) = maxval(scr%UniParms)
+ if (XY(1,i).le.0.0) then; XY(1,i) = max(maxval(scr%UniParms), 50.0)
  else;                     XY(1,i) = sqrt(XY(1,i)) ; endif
  if (XY(1,i).lt.ri) then
   ri = XY(1,i); wi = i !save worst condition
  endif
 enddo
-pr(1,:) = (/ 0.0, 0.5*maxval(scr%UniParms) /) !distance range to plot
+pr(1,:) = (/ 0.0, 0.5*max(maxval(scr%UniParms), 50.0) /) !distance range to plot
 pr(2,:) = (/ 0.0, 2.0 /) !time range to plot
 sr(1,:) = (/ 7, 99 /) !local pixel ranges
 sr(2,:) = (/ 1, 93 /)

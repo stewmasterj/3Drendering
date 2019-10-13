@@ -1,4 +1,4 @@
-#!../view1 -s 
+#!../view -s 
 # vim: syntax=sh
 # screen data file
 fbpath	/dev/fb0	#framebuffer device path
