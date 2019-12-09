@@ -75,6 +75,7 @@ Commands that take parameters show their values when executed sans parms
 |` run               ` |resumes rendering animation|  
 |` picture           ` |take a screen shot|  
 |` record            ` |toggle recording mode (video)|  
+|` follow I          ` |camera follows surface of object I|  
 |` impulseControl    ` |set input key mode to impulse|  
 |` spatialControl    ` |set input key mode to spatial|  
 |` cpo I J (K)       ` |copy object ID I to J (through K)|  

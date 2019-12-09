@@ -33,8 +33,9 @@ interface
  end subroutine
 end interface
 real(4), dimension(4) :: qrl, qrr, qru, qrd, qrw, qrc, qr, qtmp2
-real(4), dimension(3) :: vt
-integer ::  t, err
+real(4), dimension(3) :: vt, normal
+integer ::  t, err, i
+integer, dimension(1) :: mj
 !!! for fcurses
 character, dimension(5) :: ch
 character(5) :: Fc
@@ -179,6 +180,14 @@ do !main do loop for capturing keys
     cam%velocity = cam%velocity +vt
    else; cam%velocity = vt*scr%ds
    endif
+   if (Ofollow.gt.0) then ! project velocity onto plane defined by normal
+    ! closest vertex in object
+    mj = minloc(o(Ofollow)%sp(1,:))
+    ! get unit normal
+    normal = o(Ofollow)%vertnorm(:,mj(1))
+    ! vector rejection from normal unit vector (tanjential velocity)
+    cam%velocity = cam%velocity - normal*dot_product(cam%velocity,normal)
+   endif
   endif
 
  endif ! end keystroke !}}}
@@ -191,24 +200,42 @@ do !main do loop for capturing keys
   ! inverse of the globalrotor is a rotor that rotates back to global coordinates
   call quatinv( scr%globalrotor, cam%orient )
   !keep track of what direction the global axes point
-  call quatrotate( (/0.0,1.0,0.0,0.0/), scr%globalrotor, qtmp2)
-  axisX = qtmp2(2:4)
-  call quatrotate( (/0.0,0.0,1.0,0.0/), scr%globalrotor, qtmp2)
-  axisY = qtmp2(2:4)
-  call quatrotate( (/0.0,0.0,0.0,1.0/), scr%globalrotor, qtmp2)
-  axisZ = qtmp2(2:4)
+  !call quatrotate( (/0.0,1.0,0.0,0.0/), scr%globalrotor, qtmp2)
+  !axisX = qtmp2(2:4)
+  call quat3rotate( (/1.0,0.0,0.0/), scr%globalrotor, axisX)
+  !call quatrotate( (/0.0,0.0,1.0,0.0/), scr%globalrotor, qtmp2)
+  !axisY = qtmp2(2:4)
+  call quat3rotate( (/0.0,1.0,0.0/), scr%globalrotor, axisY)
+  !call quatrotate( (/0.0,0.0,0.0,1.0/), scr%globalrotor, qtmp2)
+  !axisZ = qtmp2(2:4)
+  call quat3rotate( (/0.0,0.0,1.0/), scr%globalrotor, axisZ)
   !keep track of what direction the global axes point
-  call quatrotate( (/0.0,1.0,0.0,0.0/), cam%orient, qtmp2)
-  caX = qtmp2(2:4)
+  !call quatrotate( (/0.0,1.0,0.0,0.0/), cam%orient, qtmp2)
+  !caX = qtmp2(2:4)
+  call quat3rotate( (/1.0,0.0,0.0/), cam%orient, caX)
   call cart2sph( caX, caXs ) ! to get theta and phi values for the heading
-  call quatrotate( (/0.0,0.0,1.0,0.0/), cam%orient, qtmp2)
-  caY = qtmp2(2:4)
-  call quatrotate( (/0.0,0.0,0.0,1.0/), cam%orient, qtmp2)
-  caZ = qtmp2(2:4)
+  !call quatrotate( (/0.0,0.0,1.0,0.0/), cam%orient, qtmp2)
+  !caY = qtmp2(2:4)
+  call quat3rotate( (/0.0,1.0,0.0/), cam%orient, caY)
+  !call quatrotate( (/0.0,0.0,0.0,1.0/), cam%orient, qtmp2)
+  !caZ = qtmp2(2:4)
+  call quat3rotate( (/0.0,0.0,1.0/), cam%orient, caZ)
  endif
 
  if (translate.or.impulseControl) then
    cam%po = cam%po +cam%velocity*scr%dt
+   if (Ofollow.gt.0) then !make distance correction to follow surface
+    ! closest vertex in object
+    mj = minloc(o(Ofollow)%sp(1,:))
+    ! get unit normal
+    normal = o(Ofollow)%vertnorm(:,mj(1))
+    ! project relative displacement onto the normal  
+    ! vector rejection from normal unit vector (tanjential velocity)
+    cam%velocity = cam%velocity - normal*dot_product(cam%velocity,normal)
+    ! move down so that the cam is a radius from surface
+    cam%po = cam%po +normal*(dot_product(o(Ofollow)%rp(:,mj(1)),normal) -cam%radius)
+     
+   endif
  endif
 
  if (run)     call objectDynamics

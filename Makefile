@@ -6,7 +6,7 @@ CC=gcc
 #FCFLAGS= -Ofast -march=native -funsafe-math-optimizations
 #FCFLAGS= -O3
 FCFLAGS= -O -g -fbounds-check -Wuninitialized -Wsurprising -Wall -Wextra
-FCFLAGS= -fcheck=all -ffpe-trap=invalid,zero,overflow -g -Wall -Wextra -Werror #-pedantic
+#FCFLAGS= -fcheck=all -ffpe-trap=invalid,zero,overflow -g -Wall -Wextra -Werror #-pedantic
 #FCFLAGS += -I/usr/include
 FOMP= #-fopenmp
 

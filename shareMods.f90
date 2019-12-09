@@ -2,7 +2,7 @@
 module controlMod !{{{
 logical :: rotate, translate, record, scrot, run, impulseControl, contact
 logical :: cameraContact
-integer :: contactType
+integer :: contactType, Ofollow
 end module controlMod !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 module options !{{{

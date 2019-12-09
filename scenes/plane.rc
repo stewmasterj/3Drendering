@@ -11,6 +11,7 @@ FOV	1.5708 1.41372	# x and y field of view in radian (90, 81) degrees
 subscreen 100 200  550 700 #pixel ranges, top-left and bottom right, (row column)
 cam pos	0.0 0.0 1.0	#camera position in global space
 cam orient	0.0 1.0 1.0 1.0	#angle, axis(3) notation, from X-axis.
+cam radius 0.05 # grid spacing is 0.1
 
 # celestial sphere data
 #starfile	../stars.dat
@@ -34,7 +35,7 @@ NobjectBuff 1	# number of objects to allocate for
 LoadBackground ../objFiles/bgLabels.obj
 
 #LoadObject ../objFiles/plane.obj
-LoadObject ../objFiles/perlinPlane.obj
+LoadObject ../objFiles/perlinPlane3.obj
 #o 1 mode solid
 #o 1 mass  0.00001
 #o 1 scale 0.5
@@ -43,8 +44,8 @@ LoadObject ../objFiles/perlinPlane.obj
 #o 1 velocity 0.0 0.0 0.0
 #o 1 color 0   255 255 255 
 #o 1 stiffness 4000.0
-o 1 smooth 0 0 #set all to sharp
-o 1 smooth 0 1 # set all to smooth
+#o 1 smooth 0 0 #set all to sharp
+#o 1 smooth 0 1 # set all to smooth
 
 #cpo 1  2 20 #copy object 1 to everything from 2 to 20
 

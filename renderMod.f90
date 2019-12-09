@@ -15,7 +15,7 @@ type object
  real(4) :: mass, radius, stiffness, poisson, friction
  real(4), allocatable, dimension(:,:) :: point,ip,rp,sp
  real(4), allocatable, dimension(:,:) :: vertnorm, ivn, rvn
- integer, allocatable, dimension(:,:) :: color
+ integer, allocatable, dimension(:,:) :: color, connect
  integer, allocatable, dimension(:)   :: smooth !average normals or not
  integer, allocatable, dimension(:,:) :: tri
  ! changable values
@@ -32,6 +32,7 @@ contains
  procedure :: addPoint => objectAddPoint
  procedure :: findVertexNormal 
  procedure :: findTriangleNormal 
+ procedure :: mkconnections
 end type object
 
 type screen
@@ -300,6 +301,7 @@ ObjectBufferSize = 1 ! load only one object by default
 Nobjects = 0 ! everytime LoadObject is called, this will increment
 
 impulseControl = .false. !control is spatial rather than rate modulating
+Ofollow = 0 ! object to follow, zero for no follow
 contact = .false. !contact detection off by default
 cameraContact = .false. !objects don't interact with camera by default
 !starfilename = "stars.dat"
@@ -478,6 +480,9 @@ select case(trim(word))
    endif
   case ("seed");  if (wc>1) then; call s_get_val(2, s, scr%seed(1) )
    else; write(6,*) scr%seed(1); run=.false.; endif
+  case ("follow");  if (wc>1) then; call s_get_val(2, s, Ofollow )
+    if (Ofollow.gt.0) call o(Ofollow)%mkconnections
+   else; write(6,*) Ofollow; run=.false.; endif
   case("periodic"); scr%periodic=.true. !set universe to be periodic
   case("fbclear") ; call fb%clear !clear the fb%pxbuff and fb%zbuff
   case("pause"); run=.false. !stop animation
@@ -954,6 +959,7 @@ subroutine objectAddPoint( o, tri ) !{{{
 !      d        d is new node
 !   C     B
 ! triangle ABC becomes ABd, with new triangles: BCd and CAd
+implicit none
 class(object) :: o
 integer, intent(in) :: tri
 integer :: A, b, C, d, t
@@ -990,6 +996,27 @@ o%tri(:,t) = (/ C, A, d /)
 o%nt = t !new number of total triangles
 
 end subroutine objectAddPoint !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine mkconnections( o ) !{{{
+implicit none
+class(object) :: o
+integer :: i, t, id, j
+
+if (.not.allocated(o%connect)) allocate( o%connect(o%np,0:6) )
+o%connect = 0
+do t = 1, o%nt ! loop triangles
+ do i = 1, 3 !triangle points
+  id = o%tri(i,t) !vertex ID
+  j = o%connect(id,0) + 1
+  if (j.gt.6) then
+    write(0,*) "ERROR: overflow, too many triangles connected to vertex: ",id
+  endif
+  o%connect(id,0) = j ! record current connected triangles
+  o%connect(id,j) = t ! save triangle ID
+ enddo
+enddo
+
+end subroutine mkconnections !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine objectDynamics !{{{
 use quaternion
@@ -1031,12 +1058,8 @@ do n = 1, Nobjects
   o(n)%orient = qtmp2
 
   ! reorient velocity vector
-  !qtmp1(1) = 0.0; qtmp1(2:4) = o(n)%velocity(:)
-  !call quatrotate( qtmp1, scr%globalrotor, qtmpv)
-!  call quat3rotate( o(n)%velocity, scr%globalrotor, dv)
   dv = o(n)%velocity
   ! integrate position of object in space.
-  !o(n)%po(:)   = o(n)%po(:) + qtmpv(2:4)*scr%dt
   o(n)%po(:)   = o(n)%po(:) + dv*scr%dt
   do i = 1, o(n)%np
    ! if the object its self is rotating it can be implemented here
@@ -1044,33 +1067,19 @@ do n = 1, Nobjects
    !   ip=qlrr*lp*qlrr^-1 + po
    !   rp=qgr*(ip-cam)*qgr^-1
    ! local points rotation to global coordinates
-   !qtmp1(1) = 0.0; qtmp1(2:4) = o(n)%point(1:3,i)
-   !call quatrotate( qtmp1, o(n)%orient, qtmp2)
    call quat3rotate( o(n)%point(:,i), o(n)%orient, rp)
    o(n)%ip(:,i) = rp +o(n)%po(:)
    
    ! points global coordinates to camera coordinates
-   !o(n)%rp(:,i) = o(n)%ip(:,i) - scr%camera_p(:)
-   !qtmp1(1) = 0.0; qtmp1(2:4) = o(n)%rp(1:3,i)
-   !call quatrotate( qtmp1, scr%globalrotor, qtmp2)
-   !o(n)%rp(:,i) = qtmp2(2:4)
-   !call quat3rotate( o(n)%ip(:,i)-scr%camera_p, scr%globalrotor, o(n)%rp(:,i))
    call quat3rotate( o(n)%ip(:,i)-cam%po, scr%globalrotor, o(n)%rp(:,i))
    
    call cart2sph(o(n)%rp(:,i), o(n)%sp(:,i))
    ! transform the vertex normals as well.
    if (o(n)%smooth(i).eq.1) then
     ! local points rotation to global coordinates
-    !qtmp1(1) = 0.0; qtmp1(2:4) = o(n)%vertnorm(1:3,i)
-    !call quatrotate( qtmp1, o(n)%orient, qtmp2)
-    !o(n)%ivn(:,i) = qtmp2(2:4) !+o(n)%po(:)
     call quat3rotate( o(n)%vertnorm(:,i), o(n)%orient, o(n)%ivn(:,i))
     
     ! points global coordinates to camera coordinates
-    !o(n)%rvn(:,i) = o(n)%ivn(:,i) !- scr%camera_p(:)
-    !qtmp1(1) = 0.0; qtmp1(2:4) = o(n)%ivn(1:3,i)
-    !call quatrotate( qtmp1, scr%globalrotor, qtmp2)
-    !o(n)%rvn(:,i) = qtmp2(2:4)
     call quat3rotate( o(n)%ivn(:,i), scr%globalrotor, o(n)%rvn(:,i))
    endif
   enddo !end point loop
@@ -1615,7 +1624,7 @@ end subroutine drawObjects !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine commandHelp !{{{
 integer :: i, n
-character(80), dimension(57) :: c
+character(80), dimension(58) :: c
 n = 0
 c(:) =""
 n=n+1;c(n)="Commands that take parameters show their values when executed sans parms"
@@ -1652,6 +1661,7 @@ n=n+1;c(n)=" pause              stops rendering animation"
 n=n+1;c(n)=" run                resumes rendering animation"
 n=n+1;c(n)=" picture            take a screen shot"
 n=n+1;c(n)=" record             toggle recording mode (video)"
+n=n+1;c(n)=" follow I           camera follows surface of object I"
 n=n+1;c(n)=" impulseControl     set input key mode to impulse"
 n=n+1;c(n)=" spatialControl     set input key mode to spatial"
 n=n+1;c(n)=" cpo I J (K)        copy object ID I to J (through K)"

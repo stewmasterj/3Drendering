@@ -116,7 +116,7 @@ call quatexp(b*ql,c)
 
 end subroutine quatpow !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
-subroutine quatdot( a, b, c ) !{{{
+subroutine quatdotnorm( a, b, c ) !{{{
 implicit none
 real(4), dimension(4), intent(in)  :: a, b
 real(4), intent(out) :: c !c is output
@@ -126,7 +126,14 @@ x = sum(a*b)
 y = sqrt( a(1)*a(1)+a(2)*a(2)+a(3)*a(3)+a(4)*a(4) )
 z = sqrt( b(1)*b(1)+b(2)*b(2)+b(3)*b(3)+b(4)*b(4) )
 c = x/(y*z)
-end subroutine quatdot !}}}
+end subroutine quatdotnorm !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine geodesicdist( a, b, c ) !{{{
+implicit none
+real(4), dimension(4), intent(in)  :: a, b
+real(4), intent(out) :: c !c is output
+c = acos(2.0*sum(a*b)**2 -1.0 )
+end subroutine geodesicdist !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine quatrotate( a, b, c ) !{{{
 implicit none
@@ -173,6 +180,37 @@ n = sin(0.5*b)
 c(2:4) = n*a(2:4)
 end subroutine quatrotor !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine rotor2matrix( q, R ) !{{{
+implicit none
+real(4), dimension(4), intent(in) :: q
+real(4), dimension(3,3), intent(out) :: R
+real(4) :: s
+call quatnorm( q, s )
+s = 1.0/(s*s)
+R(1,:) = (/ 1.0 - 2.0*s*(q(3)*q(3) +q(4)*q(4)), 2.0*s*(q(2)*q(3)-q(4)*q(1)), 2.0*s*(q(2)*q(4)+q(3)*q(1)) /)
+R(2,:) = (/ 2.0*s*(q(2)*q(3)+q(4)*q(1)), 1.0-2.0*s*(q(2)*q(2)+q(4)*q(4)), 2.0*s*(q(3)*q(4)-q(2)*q(1)) /)
+R(3,:) = (/ 2.0*s*(q(2)*q(4)-q(3)*q(1)), 2.0*s*(q(3)*q(4)+q(2)*q(1)), 1.0-2.0*s*(q(2)*q(2)+q(3)*q(3)) /)
+end subroutine rotor2matrix !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine angs2rotor( a, q ) !{{{
+implicit none
+real(4), dimension(3), intent(in) :: a !Euler angles,  yaw (Z), pitch (Y), roll (X)
+real(4), dimension(4), intent(out) :: q ! quaternion rotor
+real(4) :: cy, sy, cp, sp, cr, sr
+! from : https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+cy = cos(a(3) * 0.5)
+sy = sin(a(3) * 0.5)
+cp = cos(a(2) * 0.5)
+sp = sin(a(2) * 0.5)
+cr = cos(a(1) * 0.5)
+sr = sin(a(1) * 0.5)
+
+q(1) = cy * cp * cr + sy * sp * sr
+q(2) = cy * cp * sr - sy * sp * cr
+q(3) = sy * cp * sr + cy * sp * cr
+q(4) = sy * cp * cr - cy * sp * sr
+subroutine angs2rotor !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine rotoraxis( q, a ) !{{{
 implicit none
 real(4), dimension(4), intent(in) :: q
@@ -188,6 +226,10 @@ else
   a(2:4) = q(2:4)/n !axis of rotation
 endif
 a(1) = a(1)*2.0   !angle of rotation in radian
+! wiki just has this: https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation
+!n = sqrt(sum(q(2:4)**2))
+!a(2:4) = q(2:4)/n
+!a(1) = 2.0*atan2(n,q(1))
 end subroutine rotoraxis !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine cart2sph( a, b ) !{{{
