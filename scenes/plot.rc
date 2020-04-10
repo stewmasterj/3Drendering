@@ -1,0 +1,93 @@
+#!../view -s 
+# vim: syntax=sh
+# screen data file
+fbpath	/dev/fb0	#framebuffer device path
+#fbpath	fb.raw #if not framebuffer device  choose file name
+width	1440	#resolution of framebuffer
+height	900	# this can be found with the "fbset" command
+linelength	1472	#the actual line length typically is longer than width
+tmpdir	/tmp		#temporary directory
+FOV	1.5708 1.41372	# x and y field of view in radian (90, 81) degrees
+#FOV	0.78   0.72	# x and y field of view in radian (44, 40) degrees
+#FOV	0.39   0.36	# x and y field of view in radian (22, 20) degrees
+subscreen 100 200  550 700 #pixel ranges, top-left and bottom right, (row column)
+#cam pos	0.0 -7.0 1.0	#camera position in global space
+cam pos	-10.0 0.0 0.0	#camera position in global space
+#cam orient	-1.5708 0.0 0.0 1.0	#angle, axis(3) notation, from X-axis.
+#cam orient	-0.785398 0.0 0.0 1.0	#angle, axis(3) notation, from X-axis.
+cam orient	0.0 1.0 1.0 1.0	#angle, axis(3) notation, from X-axis.
+cam radius 0.05 # grid spacing is 0.1
+
+# celestial sphere data
+#starfile	../stars.dat
+#Nstars	300
+
+#interactive	# curser keys for camera position and orientation (comment to render scene)
+timestep 0.002	# seconds to wait for each time step check
+impulseControl	# key strokes increment velocity and angle rate
+dtheta	0.01	# angular increment for camera rotation
+dspace	0.05	# translational increment for motion of camera
+
+#############
+#contact 1	# activate contact detection (0=off, 1=elastic-frictionless, 2=elastic-frictional)
+
+#universe box 50.0 50.0 50.0
+#universe sphere 86.61 #circumscribes a 50x50x50 box 
+#periodic	# set universe box to be periodic
+
+NobjectBuff 1	# number of objects to allocate for
+#LoadBackground ../objFiles/stars.obj
+LoadBackground ../objFiles/bgLabels.obj
+
+# IMPORT data from column file
+#dataColorHSV # true by default
+dataColorRGB # false by default
+dataPoint cloud #sph #point, circ, fcirc, sph, cloud
+### set 1 color by 6th column ###
+#dataColumns 1 2 3 0 0 6 0 0 #(x,y,z,r,t,h,s,v)
+#dataRanges h -4553.0 -3875.0
+#dataRanges s 255 # full saturation
+#dataRanges v 255 # full value
+### set 2 radius by scale ###
+#dataColumns 1 2 3 4 0 6 0 0 #(x,y,z,r,t,h,s,v)
+dataColumns 1 2 3 0 5 6 7 8 #(x,y,z,r,t,R,G,B)
+dataRanges r 0.707 0.707
+#dataRanges t 128 # half transparent spheres
+#dataRanges h -4553.0 -3875.0
+#dataRanges s 255 # full saturation
+#dataRanges v 255 # full value
+
+#o 1 mode sphere  #alternative command
+#LoadData 0000800.MD3 # loads into next available object
+LoadData dat.dat # loads into next available object
+#saveObject 1 data.obj # save loaded data as Object file 
+#o 1 save FILE  # alternative comand
+
+#LoadObject ../objFiles/plane.obj
+#LoadObject ../objFiles/perlinPlane3.obj
+#LoadObject ../objFiles/perlinPlane4.obj
+#o 1 mode solid
+#o 1 mass  0.00001
+#o 1 scale 0.5
+#o 1 offset 15.0 0.0 0.0 # offset
+o 1 spin 0.02   0.0 1.0 -1.0 #slow spin
+#o 1 velocity 0.0 0.0 0.0
+#o 1 color 0   255 255 255 
+#o 1 stiffness 4000.0
+#o 1 smooth 0 0 #set all to sharp
+#o 1 smooth 0 1 # set all to smooth
+
+#cpo 1  2 20 #copy object 1 to everything from 2 to 20
+
+# randomize parameters of the 20 objects
+#seed  34
+#orand offset 1 20  -50.0 50.0  -50.0 50.0  -50.0 50.0
+#orand velocity 1 20  -20.0 20.0  -20.0 20.0  -20.0 20.0
+#orand spin 1 20  -0.05 0.05   0.0 1.0  0.0 1.0  0.0 1.0
+
+dumpFile	dmp.ppm	# basename to dump render view to PPM files
+#timeout		150	# number of steps to run interactive renderer
+
+run	# begin local animation (i.e. allow objects their motion)
+#record  # record the images to make movie
+

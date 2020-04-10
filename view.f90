@@ -32,9 +32,10 @@ interface
   integer(c_int32_t), value :: useconds
  end subroutine
 end interface
-real(4), dimension(4) :: qrl, qrr, qru, qrd, qrw, qrc, qr, qtmp2
-real(4), dimension(3) :: vt, normal
-integer ::  t, err, i
+real(4), dimension(4) :: qrl, qrr, qru, qrd, qrw, qrc, qr
+real(4), dimension(4) :: qtmp, qtmp2 !temps
+real(4), dimension(3) :: vt, normal, p1, p2, p3, w, n1,n2,n3, p
+integer ::  t, err, ct, i, j, k
 integer, dimension(1) :: mj
 !!! for fcurses
 character, dimension(5) :: ch
@@ -72,17 +73,20 @@ call quatrotor( (/ 0.0, 0.0, 0.0, 1.0 /),  scr%dtheta, qrw )
 call quatrotor( (/ 0.0, 0.0, 0.0, 1.0 /), -scr%dtheta, qrc )
 !!!!!!!!!!!!!!!!!!!!!!!!}}}
 
-! init the screen
-call init_screen( scr%tmpdir )
-call cls
-! open and set framebuffer. write functins to fb%pxbuff before writting to device.
-call fb%fbinit(10,scr%fbpath, scr%width, scr%height, scr%line, .true.)
-
 ! call one step dynamics to get global vectors uptodate
 call objectDynamics
 
+! init the screen  (fcurses, keyboard interaction)
+if (scr%interactive) then
+  call init_screen( scr%tmpdir )
+  call cls
+endif
+
+! open and set framebuffer. write functins to fb%pxbuff before writting to device.
+call fb%fbinit(10,scr%fbpath, scr%width, scr%height, scr%line, .true.)
 call fb%clear !clear the fb%pxbuff and fb%zbuff
 if (.not.allocated(fb%zbuff)) write(0,*) "zbuffer not allocated"
+
 call drawscreen
 
 ! can stop program here to get one snapshot of initial conditions before interactions
@@ -180,13 +184,53 @@ do !main do loop for capturing keys
     cam%velocity = cam%velocity +vt
    else; cam%velocity = vt*scr%ds
    endif
-   if (Ofollow.gt.0) then ! project velocity onto plane defined by normal
+   if (Ofollow.gt.0) cam%velocity(3) = 0.0
+   if (Ofollow.lt.0) then ! project velocity onto plane defined by normal
     ! closest vertex in object
     mj = minloc(o(Ofollow)%sp(1,:))
+    ! closest triangle ID
+    call o(Ofollow)%closestTriangle( ct, w )
+    ! normal vector of nearest triangle
+    !call o(Ofollow)%findTriangleNormal( ct, normal )
+    ! distance to nearest trianlge, d = (cam-p1).dot.norm
+    !d = dot_product(o(Ofollow)%point(:,o(Ofollow)%tri(1,ct)),normal) 
+    ! elevated triangle verteces
+    i = o(Ofollow)%tri(1,ct) ! vertex ID 1
+    j = o(Ofollow)%tri(2,ct) ! vertex ID 2
+    k = o(Ofollow)%tri(3,ct) ! vertex ID 3
+    !w(1) = o(Ofollow)%sp(1,i) -cam%radius
+    !w(2) = o(Ofollow)%sp(1,j) -cam%radius
+    !w(3) = o(Ofollow)%sp(1,k) -cam%radius
+    !w = w/sum(w) !normalize
+!write(0,*) "p1:",p1,char(13); write(0,*) "p2:",p2,char(13) 
+!write(0,*) "p3:",p3,char(13); call flush(0)
+    ! get barycentric coord for elevated triangle
+    !call getBary3d( p1,p2,p3, (/ 0.0,0.0,0.0 /), w )
+!write(0,*) "bary:",w,char(13); call flush(0)
     ! get unit normal
-    normal = o(Ofollow)%vertnorm(:,mj(1))
+    !normal = o(Ofollow)%vertnorm(:,mj(1))
+    !normal = o(Ofollow)%rvn(:,mj(1))
+    p1 = o(Ofollow)%ip(:,i) 
+    p2 = o(Ofollow)%ip(:,j) 
+    p3 = o(Ofollow)%ip(:,k) 
+    n1 = o(Ofollow)%ivn(:,i)
+    n2 = o(Ofollow)%ivn(:,j)
+    n3 = o(Ofollow)%ivn(:,k)
+    call PNtriNorm( p1,p2,p3, n1,n2,n3, w, normal )
+!write(0,*) "p1norm:",n1,char(13),n2,char(13),n3,char(13); call flush(0)
+!write(0,*) "PNnorm:",normal,char(13); call flush(0)
+!   normal = w(1)*n1 +w(2)*n2 +w(3)*n3
+!write(0,*) "Wnorm:",normal,char(13); call flush(0)
+    ! get unit normal
+    !normal = o(Ofollow)%vertnorm(:,mj(1))
+    !normal = o(Ofollow)%ivn(:,mj(1))
     ! vector rejection from normal unit vector (tanjential velocity)
-    cam%velocity = cam%velocity - normal*dot_product(cam%velocity,normal)
+    ! quatrotor required for rotation from a to b 
+    call ab2rotor( (/ 0.0,0.0,1.0 /), normal, qtmp) 
+    qtmp(2:4) = -qtmp(2:4)
+    !cam%velocity = cam%velocity - normal*dot_product(cam%velocity,normal)
+    call quat3rotate( cam%velocity, qtmp, p )
+    cam%velocity = p !rotated velocity vector
    endif
   endif
 
@@ -197,6 +241,54 @@ do !main do loop for capturing keys
   ! rotate the global rotor by qr
   call quatmult( cam%spin, scr%globalrotor, qtmp2 )
   scr%globalrotor = qtmp2
+  if (Ofollow.gt.0) then
+    ! rotate orientation to follow local "horizon"
+    ! closest vertex in object
+    mj = minloc(o(Ofollow)%sp(1,:))
+    ! closest triangle ID
+    call o(Ofollow)%closestTriangle( ct, w )
+!write(0,*)  "w:",w,cam%po,char(13)
+    ! normal vector of nearest triangle
+    !call o(Ofollow)%findTriangleNormal( ct, normal )
+    ! distance to nearest trianlge, d = (cam-p1).dot.norm
+    !d = dot_product(o(Ofollow)%point(:,o(Ofollow)%tri(1,ct)),normal) 
+    ! elevated triangle verteces
+    i = o(Ofollow)%tri(1,ct) ! vertex ID 1
+    j = o(Ofollow)%tri(2,ct) ! vertex ID 2
+    k = o(Ofollow)%tri(3,ct) ! vertex ID 3
+    !w(1) = o(Ofollow)%sp(1,i) -cam%radius
+    !w(2) = o(Ofollow)%sp(1,j) -cam%radius
+    !w(3) = o(Ofollow)%sp(1,k) -cam%radius
+    !w = w/sum(w) !normalize
+!write(0,*) "p1:",p1,char(13); write(0,*) "p2:",p2,char(13) 
+!write(0,*) "p3:",p3,char(13); call flush(0)
+    ! get barycentric coord for elevated triangle
+    !call getBary3d( p1,p2,p3, (/ 0.0,0.0,0.0 /), w )
+!write(0,*) "bary:",w,char(13); call flush(0)
+    ! get unit normal
+    !normal = o(Ofollow)%vertnorm(:,mj(1))
+    !normal = o(Ofollow)%rvn(:,mj(1))
+    p1 = o(Ofollow)%rp(:,i) 
+    p2 = o(Ofollow)%rp(:,j) 
+    p3 = o(Ofollow)%rp(:,k) 
+    n1 = o(Ofollow)%rvn(:,i)
+    n2 = o(Ofollow)%rvn(:,j)
+    n3 = o(Ofollow)%rvn(:,k)
+!    call PNtriNorm( p1,p2,p3, n1,n2,n3, w, normal )
+!write(0,*) "p1norm:",n1,char(13),n2,char(13),n3,char(13); call flush(0)
+!write(0,*) "PNnorm:",normal,char(13); call flush(0)
+!    call PhongNorm( n1,n2,n3, w, normal )
+!write(0,*) "PGnorm:",normal,char(13); call flush(0)
+   normal = w(1)*n1 +w(2)*n2 +w(3)*n3
+!write(0,*) "Wnorm:",normal,char(13); call flush(0)
+    ! quatrotor required for rotation from a to b 
+    !call ab2rotor( axisZ, normal, qtmp) 
+    call ab2rotor( (/ 0.0,0.0,1.0 /), normal, qtmp) 
+    !qtmp(2:4) = -qtmp(2:4)
+!write(0,*) char(13),normal, ACOS(dot_product(normal, (/ 0.0,0.0,1.0 /) ))
+    call quatmult( qtmp, scr%globalrotor, qtmp2 )
+    scr%globalrotor = qtmp2
+  endif
   ! inverse of the globalrotor is a rotor that rotates back to global coordinates
   call quatinv( scr%globalrotor, cam%orient )
   !keep track of what direction the global axes point
@@ -223,19 +315,36 @@ do !main do loop for capturing keys
  endif
 
  if (translate.or.impulseControl) then
-   cam%po = cam%po +cam%velocity*scr%dt
    if (Ofollow.gt.0) then !make distance correction to follow surface
-    ! closest vertex in object
-    mj = minloc(o(Ofollow)%sp(1,:))
-    ! get unit normal
-    normal = o(Ofollow)%vertnorm(:,mj(1))
+    ! reset i,j,k if impulseCOntrol false and rotate false
+    i = o(Ofollow)%tri(1,ct) ! vertex ID 1
+    j = o(Ofollow)%tri(2,ct) ! vertex ID 2
+    k = o(Ofollow)%tri(3,ct) ! vertex ID 3
+    p1 = o(Ofollow)%ip(:,i) 
+    p2 = o(Ofollow)%ip(:,j) 
+    p3 = o(Ofollow)%ip(:,k) 
+    n1 = o(Ofollow)%ivn(:,i)
+    n2 = o(Ofollow)%ivn(:,j)
+    n3 = o(Ofollow)%ivn(:,k)
+    !call PNtriNorm( p1,p2,p3, n1,n2,n3, w, normal )
     ! project relative displacement onto the normal  
     ! vector rejection from normal unit vector (tanjential velocity)
-    cam%velocity = cam%velocity - normal*dot_product(cam%velocity,normal)
+    !cam%velocity = cam%velocity - normal*dot_product(cam%velocity,normal)
+!    call quat3rotate( cam%velocity, qtmp, p )
+!    cam%velocity = p !rotated velocity vector
     ! move down so that the cam is a radius from surface
-    cam%po = cam%po +normal*(dot_product(o(Ofollow)%rp(:,mj(1)),normal) -cam%radius)
-     
+!    call PNtriPos( p1,p2,p3, n1,n2,n3, w, p )
+!write(0,*) "PNp:",p,char(13); call flush(0)
+    call PhongTess( p1,p2,p3, n1,n2,n3, w, p )
+!write(0,*) "PTp:",p,char(13); call flush(0)
+!    p = p1*w(1) + p2*w(2) + p3*w(3)
+!write(0,*) "INp:",p,char(13); call flush(0)
+    cam%po(3) = p(3) +cam%radius ! set z position, assuming small slopes
+    !cam%po = cam%po +normal*(dot_product(o(Ofollow)%rp(:,mj(1)),normal) -cam%radius)
+    !cam%po = cam%po +normal*(dot_product(p-cam%po,normal) -cam%radius)
+    !cam%po = p -normal*cam%radius
    endif
+   cam%po = cam%po +cam%velocity*scr%dt
  endif
 
  if (run)     call objectDynamics

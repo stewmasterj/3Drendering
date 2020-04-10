@@ -18,7 +18,7 @@ cam radius 0.05 # grid spacing is 0.1
 #Nstars	300
 
 interactive	# curser keys for camera position and orientation (comment to render scene)
-timestep 0.01	# seconds to wait for each time step check
+timestep 0.002	# seconds to wait for each time step check
 impulseControl	# key strokes increment velocity and angle rate
 dtheta	0.01	# angular increment for camera rotation
 dspace	0.05	# translational increment for motion of camera
@@ -35,7 +35,8 @@ NobjectBuff 1	# number of objects to allocate for
 LoadBackground ../objFiles/bgLabels.obj
 
 #LoadObject ../objFiles/plane.obj
-LoadObject ../objFiles/perlinPlane3.obj
+#LoadObject ../objFiles/perlinPlane3.obj
+LoadObject ../objFiles/perlinPlane4.obj
 #o 1 mode solid
 #o 1 mass  0.00001
 #o 1 scale 0.5

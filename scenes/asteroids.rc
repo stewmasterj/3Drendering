@@ -7,8 +7,10 @@ height	900	# this can be found with the "fbset" command
 linelength	1472	#the actual line length typically is longer than width
 tmpdir	/tmp		#temporary directory
 FOV	1.5708 1.41372	# x and y field of view in radian (90, 81) degrees
+FOV	1.5708 1.1424	# x and y field of view in radian (90, 65.5) degrees
 #FOV	0.39   0.36	# x and y field of view in radian (22, 20) degrees
-subscreen 100 200  550 700 #pixel ranges, top-left and bottom right, (row column)
+#subscreen 100 200  550 700 #pixel ranges, top-left and bottom right, (row column)
+subscreen 50 50  850 1150 #pixel ranges, top-left and bottom right, (row column)
 cam pos	0.0 0.0 0.0	#camera position in global space
 cam orient	0.0 1.0 1.0 1.0	#angle, axis(3) notation, from X-axis.
 

@@ -65,6 +65,12 @@ Commands that take parameters show their values when executed sans parms
 |` NobjectBuff N     ` |allocate the object buffer to this many objects.|  
 |`                   ` | WARNING will delete all existing objects|  
 |` LoadObject FILE   ` |will load object from file FILE|  
+|` dataColumns i(8)  ` |list the column numbers of a data file that correspond to x,y,z,radius,transparency,color(3). color depends on dataColor|  
+|` dataRange [xyzrthsvRGB] min max ` |corresponding to the data in the data file.|  
+|` dataColorHSV      ` |indicate that color(3) specified in dataColumns are HSV|  
+|` dataColorRGB      ` |indicate that color(3) specified in dataColumns are RGB|  
+|` dataPoint STR     ` |object mode type for data points [point,circ,fcirc,sph,cloud]|  
+|` LoadData FILE     ` |FILE is a data file with columns, e.g. CSV, SSV. Loads into th enext available object.|  
 |` camera_pos x y z  ` |location of camera|  
 |` camera_orient a u v w`  |angle-axis orientation of camera|  
 |` universe c x y z  ` |set a universal shape (c=box|sphere), size parameters|  

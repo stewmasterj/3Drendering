@@ -122,7 +122,7 @@ integer, dimension(:,:), allocatable :: tri
 integer :: Nx, Ny, Nt
 integer :: n, rgb(3), t
 real(4) :: dx
-character(50) :: carg
+character(50) :: carg, cfull
 
 if (iargc().ne.9) then
  write(0,*) "requires, x and y node numbers, grid spacing, and color"
@@ -132,19 +132,22 @@ if (iargc().ne.9) then
  STOP
 endif
 
-
-call getarg(1, carg); read(carg,*) Nx
-call getarg(2, carg); read(carg,*) Ny
-call getarg(3, carg); read(carg,*) dx
-call getarg(4, carg); read(carg,*) rgb(1)
-call getarg(5, carg); read(carg,*) rgb(2)
-call getarg(6, carg); read(carg,*) rgb(3)
+cfull=""
+call getarg(1, carg); read(carg,*) Nx;  cfull=trim(cfull)//" "//trim(carg)
+call getarg(2, carg); read(carg,*) Ny;  cfull=trim(cfull)//" "//trim(carg)
+call getarg(3, carg); read(carg,*) dx;  cfull=trim(cfull)//" "//trim(carg)
+call getarg(4, carg); read(carg,*) rgb(1);  cfull=trim(cfull)//" "//trim(carg)
+call getarg(5, carg); read(carg,*) rgb(2);  cfull=trim(cfull)//" "//trim(carg)
+call getarg(6, carg); read(carg,*) rgb(3);  cfull=trim(cfull)//" "//trim(carg)
 
 call getarg(7,carg); read(carg,*) lac   !2.0
+ cfull=trim(cfull)//" "//trim(carg)
 call getarg(8,carg); read(carg,*) gain  !0.5
+ cfull=trim(cfull)//" "//trim(carg)
 call getarg(9,carg); read(carg,*) oct   !8 ?
+ cfull=trim(cfull)//" "//trim(carg)
 
-write(6,'(A)') "name PerlinPlane"
+write(6,'(A)') "name PerlinPlane: "//trim(cfull)
 write(6,'(A)') "mode solid"
 write(6,'(A)') "offset 0.0 0.0 0.0"
 write(6,'(A)') "velocity 0.0 0.0 0.0"
@@ -198,15 +201,19 @@ do j = 1, Ny
   aa = (/0.0, dx, pos(i,j)-pos(i,min(j+1,Ny)) /)
   bb = (/dx, 0.0, pos(i,j)-pos(min(i+1,Nx),j) /)
   n1 = cross_product(bb, aa)
+!  if (n1(3).lt.0.0) n1= -n1
   aa = bb
   bb = (/0.0, -dx, pos(i,j)-pos(i,max(j-1,1)) /)
   n2 = cross_product(bb, aa)
+!  if (n2(3).lt.0.0) n2= -n2
   aa = bb
   bb = (/ -dx, 0.0, pos(i,j)-pos(max(i-1,1),j) /)
   n3 = cross_product(bb, aa)
+!  if (n3(3).lt.0.0) n3= -n3
   aa = bb
-  bb = (/ 0.0, dx, pos(i,j)-pos(i,max(j+1,Ny)) /)
+  bb = (/ 0.0, dx, pos(i,j)-pos(i,min(j+1,Ny)) /)
   n4 = cross_product(bb, aa)
+!  if (n4(3).lt.0.0) n4= -n4
   ! average all the cross products
   vn = (n1+n2+n3+n4)/4.0
   vn = vn/sqrt(dot_product(vn,vn)) ! unit vector
@@ -231,8 +238,8 @@ real(4), dimension(3) :: a, b, c
 real(4) :: dist
 
 c(1) = a(2)*b(3) - a(3)*b(2)
-c(2) = a(3)*b(2) - a(1)*b(3)
-c(3) = a(1)*b(1) - a(2)*b(1)
+c(2) = a(3)*b(1) - a(1)*b(3)
+c(3) = a(1)*b(2) - a(2)*b(1)
 dist = sqrt(dot_product(c,c))
 c = c/dist !unit vector
 

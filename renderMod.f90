@@ -13,11 +13,13 @@ type object
  integer :: nvn !number of vertex normals
  character(5) :: mode !(point|wire|solid)
  real(4) :: mass, radius, stiffness, poisson, friction
+ logical :: transparency ! flag for certain point-wise plotting
  real(4), allocatable, dimension(:,:) :: point,ip,rp,sp
  real(4), allocatable, dimension(:,:) :: vertnorm, ivn, rvn
  integer, allocatable, dimension(:,:) :: color, connect
  integer, allocatable, dimension(:)   :: smooth !average normals or not
  integer, allocatable, dimension(:,:) :: tri
+ integer, allocatable, dimension(:)   :: sortID !sorted list of IDs
  ! changable values
  real(4), dimension(3) :: po !position offset wrt global coordinates
  real(4), dimension(3) :: velocity !changes the offset position
@@ -32,7 +34,9 @@ contains
  procedure :: addPoint => objectAddPoint
  procedure :: findVertexNormal 
  procedure :: findTriangleNormal 
+ procedure :: closestTriangle
  procedure :: mkconnections
+ procedure :: sortNodes !only populates 'sortID'
 end type object
 
 type screen
@@ -186,6 +190,187 @@ enddo
 
 end subroutine loadObject !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine xyz2Object( FD, fl, obj ) !{{{
+! read an object from file descriptor FD and file name fl
+! col : column array from file corresponding to
+! col(1:3) x,y,z columns
+! col(4)   point radius
+! col(5)   pseudo transparency (current color)*(t)+(point color)*(1-t)
+! col(6:8) either RGB or HSV columns
+! rng(2,8) min and max limits for each column value in col(:)
+!          if min=max & col(i)=0 then do not read a column, but use the rng value
+!          if min=max=0.0 & col(i)>0 then auto calculate range to fit
+! set mode either sphere or circle or fcircle (filled circle)
+!use lineParse
+use quaternion
+use inputShareMod ! for col, rng, h
+use fbMod !only HSV2RGB
+implicit none
+character(*) :: fl
+!integer, intent(in) :: col(8)
+!real(4), intent(in) :: rng(2,8)
+type(object), intent(inout) :: obj
+!logical, intent(in) :: h ! is the input color columns for HSV?
+! internal
+character(80) :: line
+integer :: FD, err, i, j, ln, c(3), r(3), skip
+real(4) :: p(3), mr(2,8), q1(4), q2(4)
+real(4), allocatable, dimension(:) :: dum
+
+! allocate dummy for max needed columns
+allocate( dum( maxval(col) ) )
+
+obj%name = trim(fl)
+obj%mode = trim(md)
+obj%po(:) = 0.0
+obj%velocity(:) = 0.0
+!obj%orient(:) = 0.0; obj%orient(2:4) = 1.0
+   q1(1) = 0.0; q1(2:4) = 1.0 !obj%orient(2:4) !axis portion
+   call quatrotor( q1, 0.0, q2 )
+   obj%orient = q2
+!obj%spin(:) = 0.0; obj%spin(2:4) = 1.0
+   q1(1) = 0.0; q1(2:4) = 1.0 !obj%orient(2:4) !axis portion
+   call quatrotor( q1, 0.0, q2 )
+   obj%spin = q2
+! for contact
+obj%mass = 1.0
+obj%radius = 1.0
+! for hertzian contact
+obj%stiffness = 1.0
+obj%poisson = 0.3
+obj%friction = 1.0
+!
+obj%nt = 0 ! no triangle data
+
+open(FD,file=trim(fl),iostat=err)
+if (err.ne.0) then
+  STOP "some problem opening xyz file:"//trim(fl)
+endif
+
+! first word on first line is number of points
+!read(FD,*,iostat=err) obj%np 
+!if (err.ne.0) exit
+!read(FD,*,iostat=err) ! empty line or comments
+
+! scan the file to get number of points
+i = 0; skip = 0
+do
+ read(FD,'(A)',iostat=err) line
+ if (IS_IOSTAT_END(err)) exit
+ if (line(1:1).eq."#") then; skip = skip + 1; cycle; endif
+ i = i + 1
+enddo
+obj%np = i
+write(6,*) "Read xyz file. comments:", skip, " lines:", i
+write(6,*) "rereading..."
+
+rewind(FD)
+do i = 1, skip; read(FD,*); enddo ! skip the commented header
+
+allocate( obj%point(3,obj%np), obj%color(3,obj%np), obj%smooth(obj%np), stat=err )
+if (err.ne.0) STOP "ERROR: allocating points color smooth from data file"
+allocate( obj%ip(3,obj%np), obj%rp(3,obj%np), obj%sp(3,obj%np), stat=err )
+if (err.ne.0) STOP "ERROR: allocating ip rp sp from data file"
+
+obj%nvn = obj%np ! just make nvn=np to have a float number
+allocate( obj%vertnorm(3,obj%np), stat=err )
+if (err.ne.0) STOP "ERROR: allocating vertnorm from data file"
+
+mr = rng ! copy this here since 'mr' gets updated
+
+ln = skip
+do i = 1, obj%np
+ ln = ln+1
+ read(FD,*,iostat=err) dum(:)
+ if (err.ne.0) then
+    if (IS_IOSTAT_EOR(err)) then
+     write(0,*) "ERROR: premature End of Record reading point data in xyz file, line:", ln
+    elseif (IS_IOSTAT_END(err)) then
+     write(0,*) "ERROR: premature End of File reading point data in xyz file, line:", ln
+    else
+     write(0,*) "ERROR: reading point data in xyz file, line: ", ln
+    endif
+    STOP
+ endif
+ obj%point(1,i) = dum(col(1))
+ obj%point(2,i) = dum(col(2))
+ obj%point(3,i) = dum(col(3))
+ !obj%smooth(i)  = 1 !must be flagged otherwise vertex normals won't save in obj file
+ obj%smooth(i)  = 0 !must be zero so that dynamics don't rotate the normals
+ if (col(4).eq.0) then
+  obj%vertnorm(1,i) = rng(1,4) 
+ else
+  obj%vertnorm(1,i) = abs(dum(col(4))) ! point radius
+ endif
+ if (col(5).eq.0) then
+  obj%vertnorm(2,i) = rng(1,5) ! point transparency
+ else
+  obj%vertnorm(2,i) = abs(dum(col(5))) ! point transparency
+ endif
+ obj%vertnorm(3,i) = 0.0
+
+ ! calculate mins and maxes from the data
+ do j = 1, 8
+  if (col(j).le.0) cycle 
+  if (i.eq.1) mr(:,j) = dum(col(j)) ! initialize
+  if (dum(col(j)).lt.mr(1,j)) mr(1,j) = dum(col(j))
+  if (dum(col(j)).gt.mr(2,j)) mr(2,j) = dum(col(j))
+ enddo
+enddo
+
+
+! set global ranges if not specified in 'rng'
+do j = 1, 8
+  if (col(j).le.0) cycle ! it is set to a value
+  if (abs(rng(1,j)-rng(2,j)).lt.1.e-12) then ! it needs to be set
+    rng(:,j) = mr(:,j)
+  endif
+enddo
+
+! if reading transparency values from file column or if it's set to nonzero.
+if (col(5).ne.0 .or. abs(rng(1,5)-rng(2,5)).gt.1.e-12) then
+  obj%transparency = .true.
+endif
+
+write(6,'(a)') "dataRanges read from file if not specified:"
+write(6,*) "x: ",rng(:,1);     write(6,*) "y: ",rng(:,2)
+write(6,*) "z: ",rng(:,3);     write(6,*) "r: ",rng(:,4)
+write(6,*) "t: ",rng(:,5);     write(6,*) "R,h: ",rng(:,6)
+write(6,*) "G,s: ",rng(:,7);   write(6,*) "B,v: ",rng(:,8)
+
+
+rewind(FD)
+do i = 1, skip; read(FD,*); enddo ! skip the commented header
+! if object has a local rotation WRT global, apply it here.
+do i = 1, obj%np
+  obj%ip(:,i) = obj%point(:,i) +obj%po(:) !global coordinates
+
+ read(FD,*,iostat=err) dum(:)
+ ! color stuff
+ ! normalize column value to color range
+ do j = 1, 3
+  if (col(j+5).eq.0.or.abs(rng(1,j+5)-rng(2,j+5)).lt.1.e-12) then
+   p(j) = rng(1,j+5)
+   c(j) = nint(p(j))
+  else
+   p(j) = max( min(dum(col(5+j)),rng(2,5+j)) ,rng(1,5+j)) ! fit the value within the range
+   p(j) = (p(j)-rng(1,5+j))/(rng(2,5+j)-rng(1,5+j))  ! fraction within the range
+   c(j) = nint(p(j)*255.0)
+  endif
+ enddo ! j
+ if (h) then ! provided as HSV values, need them in RGB
+  call HSV2RGB( c(1),c(2),c(3), r(1),r(2),r(3) )
+  obj%color(1:3,i) = r(1:3)
+ else ! they are already in RGB
+  obj%color(1:3,i) = c(1:3)
+ endif
+
+enddo
+
+close(FD)
+
+end subroutine xyz2Object !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine saveObject( FD, fl, i ) !{{{
 use quaternion
 implicit none
@@ -253,6 +438,7 @@ use lineParse
 use quaternion
 !use starMod, only : starfilename, Nstars
 use controlMod
+use inputShareMod !for col, rng, h, md
 implicit none
 character(80) :: fl, line
 integer :: FD, err, ln
@@ -310,6 +496,13 @@ cameraContact = .false. !objects don't interact with camera by default
 record = .false. ! dump PPM files every frame?
 scrot = .false.  ! single screen shot flag
 
+! stuff that persists in input file only used for plotting
+col(:) = 0
+rng(:,:) = 0.0
+rng(:,4) = 1.0 ! radius
+h = .true.
+md = "point"
+
 open(FD,file=trim(fl),iostat=err)
 ln = 0
 do 
@@ -324,6 +517,8 @@ do
   endif
 enddo
 close(FD)
+call flush(0)
+call flush(6)
 if (err.gt.0) STOP
 
 if (.not.allocated(o)) allocate( o(ObjectBufferSize) )
@@ -359,6 +554,7 @@ use quaternion
 use fbMod
 !use starMod, only : starfilename, Nstars
 use controlMod
+use inputShareMod !for col, rng, h, md
 implicit none
 integer :: wc, error
 character(*) :: s
@@ -375,6 +571,7 @@ error = 0 !positive errors are fatal and kill the program, negative are warnings
 
 wc   = s_word_count( s )
 word = s_get_word( 1, s )
+
 
 select case(trim(word))
   case ("help"); call commandHelp; run=.false. 
@@ -424,19 +621,61 @@ select case(trim(word))
       else;                       contact=.false.; endif
       if (wc>2) call s_get_val(3, s, cameraContact )
    else; write(6,*) "Contact Type:",contactType; run=.false.; endif
-  case ("LoadObject"); 
+!!!! Load data !!!!
+  case ("dataColumns","dataCols")
+   if (wc==1) then; write(6,'(a,8i3)') "dataColumns (xyzrthsv):",col
+    run=.false.
+    return; endif
+   do i = 2, wc
+    call s_get_vali( i, s, col(i-1) ); enddo
+  case ("dataRange","dataRanges")
+   if (wc==1) then; write(6,'(a)') "dataRanges:"
+    write(6,*) "x: ",rng(:,1);     write(6,*) "y: ",rng(:,2)
+    write(6,*) "z: ",rng(:,3);     write(6,*) "r: ",rng(:,4)
+    write(6,*) "t: ",rng(:,5);     write(6,*) "R,h: ",rng(:,6)
+    write(6,*) "G,s: ",rng(:,7);   write(6,*) "B,v: ",rng(:,8)
+    run=.false.
+    return; endif
+   tmp = s_get_word(2, s)
+   if     (trim(tmp).eq."1".or.trim(tmp).eq."x") then
+    call s_get_valr4( 3, s, rng(1,1) ); call s_get_valr4( 4, s, rng(2,1) )
+   elseif (trim(tmp).eq."2".or.trim(tmp).eq."y") then
+    call s_get_valr4( 3, s, rng(1,2) ); call s_get_valr4( 4, s, rng(2,2) )
+   elseif (trim(tmp).eq."3".or.trim(tmp).eq."z") then
+    call s_get_valr4( 3, s, rng(1,3) ); call s_get_valr4( 4, s, rng(2,3) )
+   elseif (trim(tmp).eq."4".or.trim(tmp).eq."r") then
+    call s_get_valr4( 3, s, rng(1,4) ); call s_get_valr4( 4, s, rng(2,4) )
+   elseif (trim(tmp).eq."5".or.trim(tmp).eq."t") then
+    call s_get_valr4( 3, s, rng(1,5) ); call s_get_valr4( 4, s, rng(2,5) )
+   elseif (trim(tmp).eq."6".or.trim(tmp).eq."h".or.trim(tmp).eq."R") then
+    call s_get_valr4( 3, s, rng(1,6) ); call s_get_valr4( 4, s, rng(2,6) )
+   elseif (trim(tmp).eq."7".or.trim(tmp).eq."s".or.trim(tmp).eq."G") then
+    call s_get_valr4( 3, s, rng(1,7) ); call s_get_valr4( 4, s, rng(2,7) )
+   elseif (trim(tmp).eq."8".or.trim(tmp).eq."v".or.trim(tmp).eq."B") then
+    call s_get_valr4( 3, s, rng(1,8) ); call s_get_valr4( 4, s, rng(2,8) )
+   endif
+  case ("dataColorHSV"); h = .true.
+  case ("dataColorRGB"); h = .false.
+  case ("dataPoint"); md = trim(s_get_word(2, s))
+  case ("LoadObject","LoadData"); 
    if (wc==1) then; write(6,*) "Nobjects:",Nobjects; run=.false.; return; endif
    Nobjects = Nobjects + 1
    if (Nobjects.gt.ObjectBufferSize) then
     write(0,*) "ERROR: not loading this object as there is no more space in object buffer"
-    error=1; return
-   endif
+    error=1; return; endif
    if (.not.allocated(o)) then
     write(0,*) "ERROR: must allocate object buffer before loading object, see directive: NobjectBuff"
-    error=1; return
-   endif
+    error=1; return; endif
    tmp = s_get_word(2, s)
-   call loadObject( 12, trim(tmp), o(Nobjects) )
+   if (trim(word).eq."LoadObject") then
+    call loadObject( 12, trim(tmp), o(Nobjects) )
+   elseif (trim(word).eq."LoadData") then
+    ! this requires col, rng, h, md to be set
+    if (maxval(col).le.1) then
+     write(0,*) "ERROR: Please set 'dataColumns' to read from the data file"
+     error=1; return; endif
+    call xyz2Object( 12, trim(tmp), o(Nobjects) )
+   endif
   case ("LoadBackground");
    if (.not.allocated(o)) then
     write(0,*) "ERROR: must allocate object buffer before loading object, see directive: NobjectBuff"
@@ -452,6 +691,7 @@ select case(trim(word))
     o(0)%ip(:,i) = q2(2:4) +o(0)%po(:)
     ! background objects don't use shading so no need to rotate vertex normals
    enddo
+!!!!!!!!!!!!!!!!!!!!!!!!!
   case ("camera_pos"); 
    !if (wc==1) then; write(6,*) scr%camera_p; run=.false.; return; endif
    !call s_get_val(2, s, scr%camera_p(1) )
@@ -535,6 +775,12 @@ select case(trim(word))
     write(6,*) CR//" color:",o(scr%centerObj)%color(:,scr%centerNode)
    endif
    run=.false.; return
+  case ("saveObject","saveObj"); ! save this object as a separate object file
+     if (wc==1) then; write(6,*) "Must specify an object ID number to save"
+      run=.false.; return; endif
+     call s_get_val( 2, s, i)
+     if (wc==2) then; call saveObject( 20, "objectDump.obj", i )
+     elseif (wc==3) then; call saveObject( 20, s_get_word(3,s), i ); endif
   case("cam","camera"); ! regarding the camera object
    if (wc==1) then
     write(6,*) CR//"name:"//trim( cam%name )
@@ -809,6 +1055,44 @@ o%radius = o%radius*scl
 o%mass = o%mass*scl*scl*scl
 end subroutine objectScale !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine sortNodes( o ) !{{{
+! sorts the node distances near to far, sorted IDs in sortID
+! Sort algorithm by John Mahaffy March 10, 1995
+class(object) :: o
+integer :: i, swap1, t
+integer, dimension(1) :: swap
+real(4) :: temp
+real(4), allocatable, dimension(:) :: p
+
+if (.not.allocated(o%sortID)) allocate( o%sortID(o%np) )
+
+allocate( p(o%np) )
+p = o%sp(1,:) ! copy distances to this temp array, p
+do i = 1, o%np
+  o%sortID(i) = i ! set the index ID
+enddo
+
+do i = 1, o%np ! sort minimum distance to greatest
+  !swap = MINLOC( o%sp(1,i:o%np) ) ! sort by distance
+  swap = MAXLOC( p(i:o%np) ) ! sort by distance
+  swap1 = swap(1) +i -1
+  if (swap1.ne.i) then
+    temp = p(i)
+    p(i) = p(swap1)
+    p(swap1) = temp
+    t = o%sortID(i)
+    o%sortID(i) = o%sortID(swap1)
+    o%sortID(swap1) = t
+  endif
+enddo
+
+!do i = 1, o%np
+!  write(0,*) o%sp(1,i), p(i), o%sortID(i)
+!enddo
+
+deallocate( p )
+end subroutine sortNodes !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine findTriangleNormal( o, t, norm ) !{{{
 ! calculates the triangle normal for triangle t in local initial object coordinates
 implicit none
@@ -996,6 +1280,243 @@ o%tri(:,t) = (/ C, A, d /)
 o%nt = t !new number of total triangles
 
 end subroutine objectAddPoint !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine PhongTess( p1,p2,p3, n1,n2,n3, u, b ) !{{{
+! Point Normal triangle surface coordinate interpolation 
+! p(1:3) = positions vecotrs
+! n(1:3) = normal vectors
+! u(1:3) = barycentric coordinates of point to interpolate
+! b(1:3) = output the interpolated surface position
+implicit none
+real(4), dimension(3), intent(in) :: p1, p2, p3, n1, n2, n3, u
+real(4), dimension(3), intent(out) :: b
+real(4), dimension(3) :: p12, p21, p23, p32, p31, p13 
+
+p12 = p2-dot_product(p2-p1,n1)*n1
+p21 = p1-dot_product(p1-p2,n2)*n2
+p23 = p3-dot_product(p3-p2,n2)*n2
+p32 = p2-dot_product(p2-p3,n3)*n3
+p31 = p1-dot_product(p1-p3,n3)*n3
+p13 = p3-dot_product(p3-p1,n1)*n1
+
+b = u(1)*u(1)*p1 +u(2)*u(2)*p2 +u(3)*u(3)*p3 &
+  & +u(1)*u(2)*(p12+p21) +u(2)*u(3)*(p23+p32) &
+  & +u(3)*u(1)*(p31+p13)
+
+end subroutine PhongTess !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine PhongNorm( n1,n2,n3, u, n ) !{{{
+! Point Normal triangle surface coordinate interpolation 
+! n(1:3) = normal vectors
+! u(1:3) = barycentric coordinates of point to interpolate
+! b(1:3) = output the interpolated surface position
+implicit none
+real(4), dimension(3), intent(in) :: n1, n2, n3, u
+real(4), dimension(3), intent(out) :: n
+real(4), dimension(3) :: p12, p21, p23, p32, p31, p13 
+
+p12 = n2-dot_product(n2-n1,n1)*n1
+p21 = n1-dot_product(n1-n2,n2)*n2
+p23 = n3-dot_product(n3-n2,n2)*n2
+p32 = n2-dot_product(n2-n3,n3)*n3
+p31 = n1-dot_product(n1-n3,n3)*n3
+p13 = n3-dot_product(n3-n1,n1)*n1
+
+n = u(1)*u(1)*n1 +u(2)*u(2)*n2 +u(3)*u(3)*n3 &
+  & +u(1)*u(2)*(p12+p21) +u(2)*u(3)*(p23+p32) &
+  & +u(3)*u(1)*(p31+p13)
+
+! some reason this isn't normalized
+n = n/sqrt(dot_product(n,n))
+
+end subroutine PhongNorm !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine PNtriPos( p1,p2,p3, n1,n2,n3, u, b ) !{{{
+! Point Normal triangle surface coordinate interpolation 
+! p(1:3) = positions vecotrs
+! n(1:3) = normal vectors
+! u(1:3) = barycentric coordinates of point to interpolate
+! b(1:3) = output the interpolated surface position
+implicit none
+real(4), dimension(3), intent(in) :: p1, p2, p3, n1, n2, n3, u
+real(4), dimension(3), intent(out) :: b
+real(4), dimension(3) :: b300, b030, b003
+real(4), dimension(3) :: b210, b120, b021
+real(4), dimension(3) :: b012, b102, b201, b111
+real(4), dimension(3) :: E, V
+real(4), dimension(3) :: w12, w21, w23, w32, w31, w13
+
+! wij = (pj-pi)*Ni
+w12 = (p2-p1)*n1; w21 = (p1-p2)*n2
+w23 = (p3-p2)*n2; w32 = (p2-p3)*n3
+w31 = (p1-p3)*n3; w13 = (p3-p1)*n1
+
+b300 = p1; b030 = p2; b003 = p3
+
+b210 = (2.0*p1 +p2 -w12*n1)/3.0
+b120 = (2.0*p2 +p1 -w21*n2)/3.0
+b021 = (2.0*p2 +p3 -w23*n2)/3.0
+b012 = (2.0*p3 +p2 -w32*n3)/3.0
+b102 = (2.0*p3 +p1 -w31*n3)/3.0
+b201 = (2.0*p1 +p3 -w13*n1)/3.0
+
+E = (b210 +b120 +b021 +b012 +b102 +b201)/6.0
+V = (p1 +p2 +p3)/3.0
+b111 = 0.5*(E-V)
+
+! ideally to raster an interpolated surface these coefficients should be constant
+! and you'd put a loop here for the local barycentric coordinates
+b = b300*u(3)*u(3)*u(3) + b030*u(1)*u(1)*u(1) + b003*u(2)*u(2)*u(2) + &
+  & b210*3.0*u(3)*u(3)*u(1) + b120*3.0*u(3)*u(1)*u(1) + b201*3.0*u(3)*u(3)*u(2) + &
+  & b021*3.0*u(1)*u(1)*u(2) + b102*3.0*u(3)*u(2)*u(2) + b111*6.0*u(3)*u(2)*u(1)
+
+
+end subroutine PNtriPos !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine PNtriNorm( p1,p2,p3, n1,n2,n3, u, n ) !{{{
+! Point Normal triangle surface coordinate interpolation 
+! p1:3 = positions vecotrs
+! n1:3 = normal vectors
+! u(1:3) = barycentric coordinates of point to interpolate
+! n(1:3) = output the interpolated surface normal
+implicit none
+real(4), dimension(3), intent(in) :: p1, p2, p3, n1, n2, n3, u
+real(4), dimension(3), intent(out) :: n
+real(4), dimension(3) :: n200, n020, n002
+real(4), dimension(3) :: n110, n011, n101
+real(4) :: v12, v23, v31
+
+! vij = 2.0*(pj-pi).cdot.(ni+nj)/(pj-pi).cdot.(pj-pi)
+v12 = 2.0*dot_product((p2-p1),(n1+n2))/dot_product((p2-p1),(p2-p1))
+v23 = 2.0*dot_product((p3-p2),(n2+n3))/dot_product((p3-p2),(p3-p2))
+v31 = 2.0*dot_product((p1-p3),(n1+n2))/dot_product((p2-p1),(p2-p1))
+
+n200 = n1; n020 = n2; n002 = n3
+n110 = (n1 +n2 -v12*(p2-p1))
+n011 = (n2 +n3 -v23*(p3-p2))
+n101 = (n3 +n1 -v31*(p1-p3))
+n110 = n110/sqrt(dot_product(n110,n110))
+n011 = n011/sqrt(dot_product(n011,n011))
+n101 = n101/sqrt(dot_product(n101,n101))
+
+! ideally to raster an interpolated surface these coefficients should be constant
+! and you'd put a loop here for the local barycentric coordinates
+n =  n200*u(3)*u(3) +n020*u(1)*u(1) +n002*u(2)*u(2) & 
+  & +n110*u(3)*u(1) +n011*u(1)*u(2) +n101*u(3)*u(2)
+
+! some reason this isn't normalized
+n = n/sqrt(dot_product(n,n))
+
+end subroutine PNtriNorm !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine closestTriangle( o, tri, w ) !{{{
+implicit none
+class(object) :: o
+integer, intent(out) :: tri
+integer :: ca(1), cv, i, t
+integer :: iA
+real(4) :: dA, ra(1), x1,y1,x2,y2,x3,y3
+real(4), dimension(3), intent(out) :: w
+
+! closest vertex in this object
+ca = minloc(o%sp(1,:)) 
+cv = ca(1)
+
+! check for vertec to triangle connexions
+if (.not.allocated(o%connect)) then
+ call o%mkconnections
+endif 
+
+! iA is the first vertex ID of the first triangle that has cv
+!iA = o%tri(1,o%connect(cv,1)); iB=0
+!dA = o%sp(1,cv); dB=0.0
+
+iA = o%connect(cv,1) !; iB = 0.0
+dA = 0.0
+! loop over the connecting triangles
+do i = 1, o%connect(cv,0)
+ t = o%connect(cv,i) ! triangle ID
+ x1 = o%ip(1,o%tri(1,t))
+ y1 = o%ip(2,o%tri(1,t))
+ x2 = o%ip(1,o%tri(2,t))
+ y2 = o%ip(2,o%tri(2,t))
+ x3 = o%ip(1,o%tri(3,t))
+ y3 = o%ip(2,o%tri(3,t))
+ call getBary( x1,y1, x2,y2, x3,y3, cam%po(1), cam%po(2), w )
+ ra = minval(w) 
+!write(0,*) "  t,w:",t,w, char(13)
+ ! find triangle that has the largest barycentric coordinates
+ ! negative coordinates are outside the triangle
+ if (ra(1).gt.dA) then
+   dA= ra(1); iA = t
+ endif
+
+! do j = 1, 3
+!  v = o%tri(j,t) ! vector ID
+!  if (v.eq.cv) cycle 
+!  ! collect the next closest tris
+!  if (o%sp(1,v).lt.dA) then
+!   dB = dA; iB = iA ! save current tri
+!   dA = o%sp(1,v); iA = t ! update
+!  endif
+! enddo
+enddo
+tri = iA
+
+if (dA.lt.0.0) then !still an issue
+  write(0,*) "ERROR: problem with closest triangle.",char(13)
+  write(0,*) "point not projected inside any nearest triangle"
+endif
+
+end subroutine closestTriangle !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine getBary3d( p1,p2,p3, t, w ) !{{{
+! provide a 3d vector position, t
+! provide triangle vertec positions, p1,p2,p3
+! returns Barycentric coordinate of, t, as w
+implicit none
+real(4), dimension(3), intent(in) :: p1, p2, p3, t
+real(4), dimension(3), intent(out) :: w
+real(4), dimension(3) :: v0, v1, v2
+real(4) :: d00, d01, d11, denom, d20, d21
+v0 = p1-p2 
+v1 = p3-p2
+v2 = t-p2
+
+d00 = dot_product( v0, v0 )
+d01 = dot_product( v0, v1 )
+d11 = dot_product( v1, v1 )
+denom = d00*d11 -d01*d01
+d20 = dot_product( v2, v0 )
+d21 = dot_product( v2, v1 )
+
+w(1) = (d11*d20 -d01*d21)/denom
+w(2) = (d00*d21 -d01*d20)/denom
+w(3) = 1 -w(1) -w(2)
+end subroutine getBary3d !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine getBary( x1,y1, x2,y2, x3,y3,  x,y, w ) !{{{
+implicit none
+real(4), intent(in) :: x1,x2,x3,y1,y2,y3,x,y
+real(4), dimension(3), intent(out) :: w
+real(4) :: y23, x32, x13, y13, y31, denom, x03, y03
+
+y23 = y2-y3
+x32 = x3-x2
+x13 = x1-x3
+y13 = y1-y3
+y31 = y3-y1
+denom = y23*x13 + x32*y13
+x03 = x-x3
+y03 = y-y3
+
+w(1) = y23*x03 + x32*y03
+w(1) = w(1)/denom
+w(2) = y31*x03 + x13*y03
+w(2) = w(2)/denom
+w(3) = 1.0 -w(1) -w(2)
+
+end subroutine getBary !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine mkconnections( o ) !{{{
 implicit none
@@ -1469,9 +1990,10 @@ end subroutine ObjectRandom !}}}
 subroutine drawObjects !{{{
 use fbMod
 implicit none
-integer :: k, n, i, t, v, j, ic(3), x(3), y(3), cx, cy
+integer :: k, n, ii, i, t, v, j, ic(3), x(3), y(3), cx, cy
 character(4) :: px, px1, px2, px3
 real(4) :: tp(3,3), aa(3), bb(3), norm(3), trinorm(3), pi, ozb, dist
+logical :: sorted
 
 !pi = 4.0*ATAN2(1.0,1.0) !=log(-1.0)/i
 pi = ACOS(-1.0)
@@ -1485,24 +2007,152 @@ cy = scr%sr_y/2 + scr%sr(2,1)
 ozb = fb%zbuff(cx,cy) !old zbuff value at center of screen
 
 do n = 0, Nobjects
+
  if (o(n)%np.eq.0) cycle !object has no points and thus no triangles to render
+ sorted = .false.
+ !if (.not.scr%interactive) then ! will only order points for nonInteractive mode
+   if (o(n)%transparency) then
+     call o(n)%sortNodes
+     sorted = .true.
+   endif
+ !endif
 
  select case(trim(o(n)%mode))
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!40
  case("point") !{{{
   ! print points to screen if within Field of View (FOV)
-  do i = 1, o(n)%np
+  do ii = 1, o(n)%np
+    if (sorted) then
+      i = o(n)%sortID(ii) ! sorted far to near
+    else; i = ii; endif
     if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
     if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle
     !ic(:) = int(o(n)%color(:,i)*1.0/max(o(n)%sp(1,i)-10.0,1.0)) !get contrast based on distance
     ic(:) = int(o(n)%color(:,i)) 
-    px = char(ic(3))//char(ic(2))//char(ic(1))//char(0)
+    if (o(n)%transparency) then
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(nint(o(n)%vertnorm(2,i)))
+    else
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(0)
+    endif
     ! get screen position
     x(1) = int((o(n)%sp(3,i)+0.5*scr%FOVx)/scr%FOVx*scr%sr_x) + scr%sr(1,1)
     y(1) = int(scr%sr_y*((o(n)%sp(2,i)-0.5*(pi-scr%FOVy))/scr%FOVy)) + scr%sr(2,1)
     !if (x(1).lt.0.or.x(1).gt.fb%width)  then; error=.true.; cycle; endif
     !if (y(1).lt.0.or.y(1).gt.fb%height) then; error=.true.; cycle; endif
     call fb%putPixel( x(1), y(1), px)
+  enddo !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!40
+ case("circ") !{{{
+  ! print points to screen if within Field of View (FOV)
+  do ii = 1, o(n)%np
+    if (sorted) then
+      i = o(n)%sortID(ii) ! sorted far to near
+    else; i = ii; endif
+    if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
+    if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle
+    !ic(:) = int(o(n)%color(:,i)*1.0/max(o(n)%sp(1,i)-10.0,1.0)) !get contrast based on distance
+    ic(:) = int(o(n)%color(:,i)) 
+    if (o(n)%transparency) then
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(nint(o(n)%vertnorm(2,i)))
+    else
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(0)
+    endif
+    ! get screen position
+    x(1) = int((o(n)%sp(3,i)+0.5*scr%FOVx)/scr%FOVx*scr%sr_x) + scr%sr(1,1)
+    y(1) = int(scr%sr_y*((o(n)%sp(2,i)-0.5*(pi-scr%FOVy))/scr%FOVy)) + scr%sr(2,1)
+    !if (x(1).lt.0.or.x(1).gt.fb%width)  then; error=.true.; cycle; endif
+    !if (y(1).lt.0.or.y(1).gt.fb%height) then; error=.true.; cycle; endif
+    !call fb%putPixel( x(1), y(1), px)
+    ! calculate visual pixel distance corresponding to its radius
+    !  ang*Dist=r so ang=r/dist
+    ! point radius saved as vertnorm(1,i), divide by distance to camera
+    x(2) = nint(o(n)%vertnorm(1,i)/(o(n)%sp(1,i)*scr%FOVy)*real(scr%sr_y))
+!write(69,*) x(2)
+    call fb%circle( x(1), y(1), x(2), px)
+  enddo !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!40
+ case("fcirc") !{{{
+  ! print points to screen if within Field of View (FOV)
+  do ii = 1, o(n)%np
+    if (sorted) then
+      i = o(n)%sortID(ii) ! sorted far to near
+    else; i = ii; endif
+    if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
+    if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle
+    !ic(:) = int(o(n)%color(:,i)*1.0/max(o(n)%sp(1,i)-10.0,1.0)) !get contrast based on distance
+    ic(:) = int(o(n)%color(:,i)) 
+    if (o(n)%transparency) then
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(nint(o(n)%vertnorm(2,i)))
+    else
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(0)
+    endif
+    ! get screen position
+    x(1) = int((o(n)%sp(3,i)+0.5*scr%FOVx)/scr%FOVx*scr%sr_x) + scr%sr(1,1)
+    y(1) = int(scr%sr_y*((o(n)%sp(2,i)-0.5*(pi-scr%FOVy))/scr%FOVy)) + scr%sr(2,1)
+    !if (x(1).lt.0.or.x(1).gt.fb%width)  then; error=.true.; cycle; endif
+    !if (y(1).lt.0.or.y(1).gt.fb%height) then; error=.true.; cycle; endif
+    !call fb%putPixel( x(1), y(1), px)
+    ! calculate visual pixel distance corresponding to its radius
+    !  ang*Dist=r so ang=r/dist
+    ! point radius saved as vertnorm(1,i), divide by distance to camera
+    x(2) = nint(o(n)%vertnorm(1,i)/(o(n)%sp(1,i)*scr%FOVy)*real(scr%sr_y))
+    call fb%fillcircle( x(1), y(1), x(2), px, scr%sr, o(n)%sp(1,i) )
+  enddo !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!40
+ case("sph") !{{{
+  ! print points to screen if within Field of View (FOV)
+  do ii = 1, o(n)%np
+    if (sorted) then
+      i = o(n)%sortID(ii) ! sorted far to near
+    else; i = ii; endif
+    if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
+    if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle
+    !ic(:) = int(o(n)%color(:,i)*1.0/max(o(n)%sp(1,i)-10.0,1.0)) !get contrast based on distance
+    ic(:) = int(o(n)%color(:,i)) 
+    if (o(n)%transparency) then
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(nint(o(n)%vertnorm(2,i)))
+    else
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(0)
+    endif
+    ! get screen position
+    x(1) = int((o(n)%sp(3,i)+0.5*scr%FOVx)/scr%FOVx*scr%sr_x) + scr%sr(1,1)
+    y(1) = int(scr%sr_y*((o(n)%sp(2,i)-0.5*(pi-scr%FOVy))/scr%FOVy)) + scr%sr(2,1)
+    !if (x(1).lt.0.or.x(1).gt.fb%width)  then; error=.true.; cycle; endif
+    !if (y(1).lt.0.or.y(1).gt.fb%height) then; error=.true.; cycle; endif
+    !call fb%putPixel( x(1), y(1), px)
+    ! calculate visual pixel distance corresponding to its radius
+    !  ang*Dist=r so ang=r/dist
+    ! point radius saved as vertnorm(1,i), divide by distance to camera
+    x(2) = nint(o(n)%vertnorm(1,i)/(o(n)%sp(1,i)*scr%FOVy)*real(scr%sr_y))
+    call fb%sphere( x(1), y(1), x(2), px, scr%sr, o(n)%sp(1,i) )
+  enddo !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!40
+ case("cloud") !{{{
+  ! print points to screen if within Field of View (FOV)
+  do ii = 1, o(n)%np
+    if (sorted) then
+      i = o(n)%sortID(ii) ! sorted far to near
+    else; i = ii; endif
+    if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
+    if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle
+    !ic(:) = int(o(n)%color(:,i)*1.0/max(o(n)%sp(1,i)-10.0,1.0)) !get contrast based on distance
+    ic(:) = int(o(n)%color(:,i)) 
+    if (o(n)%transparency) then
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(nint(o(n)%vertnorm(2,i)))
+    else
+      px = char(ic(3))//char(ic(2))//char(ic(1))//char(0)
+    endif
+    ! get screen position
+    x(1) = int((o(n)%sp(3,i)+0.5*scr%FOVx)/scr%FOVx*scr%sr_x) + scr%sr(1,1)
+    y(1) = int(scr%sr_y*((o(n)%sp(2,i)-0.5*(pi-scr%FOVy))/scr%FOVy)) + scr%sr(2,1)
+    !if (x(1).lt.0.or.x(1).gt.fb%width)  then; error=.true.; cycle; endif
+    !if (y(1).lt.0.or.y(1).gt.fb%height) then; error=.true.; cycle; endif
+    !call fb%putPixel( x(1), y(1), px)
+    ! calculate visual pixel distance corresponding to its radius
+    !  ang*Dist=r so ang=r/dist
+    ! point radius saved as vertnorm(1,i), divide by distance to camera
+    x(2) = nint(o(n)%vertnorm(1,i)/(o(n)%sp(1,i)*scr%FOVy)*real(scr%sr_y))
+    call fb%cloud( x(1), y(1), x(2), px, scr%sr, o(n)%sp(1,i) )
   enddo !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!40
  case("wire") !{{{
@@ -1624,7 +2274,7 @@ end subroutine drawObjects !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine commandHelp !{{{
 integer :: i, n
-character(80), dimension(58) :: c
+character(80), dimension(66) :: c
 n = 0
 c(:) =""
 n=n+1;c(n)="Commands that take parameters show their values when executed sans parms"
@@ -1651,6 +2301,14 @@ n=n+1;c(n)=" linelength N       frame buffer line length Bytes"
 n=n+1;c(n)=" NobjectBuff N      allocate the object buffer to this many objects. "
 n=n+1;c(n)="                     WARNING will delete all existing objects"
 n=n+1;c(n)=" LoadObject FILE    will load object from file FILE"
+n=n+1;c(n)=" dataColumns i(8)   list the column numbers of a data file that correspond to"
+n=n+1;c(n)="                     x,y,z,radius,transparency,color(3). color depends on dataColor"
+n=n+1;c(n)=" dataRange [xyzrthsvRGB] min max    corresponding to the data in the data file."
+n=n+1;c(n)=" dataColorHSV       indicate that color(3) specified in dataColumns are HSV"
+n=n+1;c(n)=" dataColorRGB       indicate that color(3) specified in dataColumns are RGB"
+n=n+1;c(n)=" dataPoint [point,circ,fcirc,sph,cloud]    object mode type for data points"
+n=n+1;c(n)=" LoadData FILE      FILE is a data file with columns, e.g. CSV, SSV."
+n=n+1;c(n)="                     loads into the next available object."
 n=n+1;c(n)=" camera_pos x y z   location of camera" 
 n=n+1;c(n)=" camera_orient a u v w  angle-axis orientation of camera" 
 n=n+1;c(n)=" universe c x y z   set a universal shape (c=box|sphere), size parameters"

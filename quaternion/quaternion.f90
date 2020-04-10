@@ -12,9 +12,15 @@ module quaternion
 ! quatexp(a,b)    exponential of a is b
 ! quatlog(a,b)    natural logarithm of a is b
 ! quatpow(a,b,c)  a raised to the b power is c
-! quatdot(a,b,c)  a dot b is c scalar
+! quatdotnorm(a,b,c)  a dot b is c scalar
+
+! geodesicdist(a,b,c) compute geodesic distance from a to b
 ! quatrotate(a,b,c) rotate pure vector a by unit rotor b, giving c
+! quat3rotate(a,b,c) rotate pure vector a(3) by unit rotor b, giving c(3)
 ! quatrotor(a,b,c) create a rotor from axis a and angle b (radians) to give rotor c.
+! abrotor(a,b,c)  put in two vectors a,b to get rotor that rotates a to b.
+! rotor2matrix(q,R) create rotation matrix from rotor
+! angs2rotor(a,b) Euler angles to rotor
 ! rotoraxis(q,a)  return angle,axis notation, a, from rotor, q.
 
 ! cart2sph(a,b)   cartesian vector a converted to spherical vector b
@@ -128,6 +134,7 @@ z = sqrt( b(1)*b(1)+b(2)*b(2)+b(3)*b(3)+b(4)*b(4) )
 c = x/(y*z)
 end subroutine quatdotnorm !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine geodesicdist( a, b, c ) !{{{
 implicit none
 real(4), dimension(4), intent(in)  :: a, b
@@ -180,6 +187,28 @@ n = sin(0.5*b)
 c(2:4) = n*a(2:4)
 end subroutine quatrotor !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
+subroutine ab2rotor( a, b, c ) !{{{
+implicit none
+real(4), dimension(3), intent(in) :: a, b
+real(4), dimension(4), intent(out) :: c
+real(4), dimension(4) :: q
+real(4), dimension(3) :: ax
+real(4) :: ang, da, db
+
+da = SQRT(dot_product(a,a))
+db = SQRT(dot_product(b,b))
+ang = ACOS(dot_product(a,b)/(da*db))
+!if (ang.gt.3.141593) ang = ang-3.1415926535
+
+call cross_product(a/da,b/db,ax) ! get the rotation axis
+da = SQRT(dot_product(ax,ax))
+
+q=0.0
+q(2:4) = ax/da !set rotation axis
+call quatrotor( q, -ang, c )
+
+end subroutine ab2rotor !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine rotor2matrix( q, R ) !{{{
 implicit none
 real(4), dimension(4), intent(in) :: q
@@ -209,7 +238,7 @@ q(1) = cy * cp * cr + sy * sp * sr
 q(2) = cy * cp * sr - sy * sp * cr
 q(3) = sy * cp * sr + cy * sp * cr
 q(4) = sy * cp * cr - cy * sp * sr
-subroutine angs2rotor !}}}
+end subroutine angs2rotor !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine rotoraxis( q, a ) !{{{
 implicit none
@@ -231,6 +260,7 @@ a(1) = a(1)*2.0   !angle of rotation in radian
 !a(2:4) = q(2:4)/n
 !a(1) = 2.0*atan2(n,q(1))
 end subroutine rotoraxis !}}}
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine cart2sph( a, b ) !{{{
 implicit none
