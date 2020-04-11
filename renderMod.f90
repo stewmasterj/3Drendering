@@ -474,6 +474,12 @@ cam%po  = (/ -10.0, 0.0, 0.0 /) !default camera position
 cam%velocity  = (/ 0.0, 0.0, 0.0 /) ! yoru personal velocity
 cam%orient = (/ 0.0, 1.0, 1.0, 1.0 /) !initial angle-axis notation
 cam%spin = (/ 0.0, 1.0, 1.0, 1.0 /) !initial angle-axis notation
+q1(1) = 0.0; q1(2:4) = cam%orient(2:4) !axis portion
+call quatrotor( q1, cam%orient(1), q2 )
+cam%orient = q2
+q1(1) = 0.0; q1(2:4) = cam%spin(2:4) !axis portion
+call quatrotor( q1, cam%spin(1), q2 )
+cam%spin = q2
 ! for camera contact
 cam%mass = 1.0
 cam%radius = 1.0
@@ -504,9 +510,12 @@ h = .true.
 md = "point"
 
 open(FD,file=trim(fl),iostat=err)
+if (err.ne.0) then
+  STOP "ERROR opening scene file:"//trim(fl)
+endif
 ln = 0
 do 
-  line = getLine( 10, ln, err )
+  line = getLine( FD, ln, err )
 !write(6,'(i3,x,A)') ln,trim(line) !echo the read line
   if (err.ne.0) exit 
   if (len(trim(line)).le.0) cycle
@@ -515,11 +524,12 @@ do
     write(0,*) "ERROR: interpreting line: ",ln," of file:"//trim(fl)
     exit
   endif
+  if (err.lt.0) exit !user defined exit
 enddo
 close(FD)
 call flush(0)
 call flush(6)
-if (err.gt.0) STOP
+if (err.ne.0) STOP
 
 if (.not.allocated(o)) allocate( o(ObjectBufferSize) )
 
@@ -532,16 +542,9 @@ if (.not.allocated(o)) allocate( o(ObjectBufferSize) )
 !call quatrotor( q1, scr%camera_spin(1), q2 )
 !scr%camera_spin = q2
 
-q1(1) = 0.0; q1(2:4) = cam%orient(2:4) !axis portion
-call quatrotor( q1, cam%orient(1), q2 )
-cam%orient = q2
 
-q1(1) = 0.0; q1(2:4) = cam%spin(2:4) !axis portion
-call quatrotor( q1, cam%spin(1), q2 )
-cam%spin = q2
-
-scr%sr_x = scr%sr(1,2)-scr%sr(1,1) ! x width for 3d screen
-scr%sr_y = scr%sr(2,2)-scr%sr(2,1) ! y width
+!scr%sr_x = scr%sr(1,2)-scr%sr(1,1) ! x width for 3d screen
+!scr%sr_y = scr%sr(2,2)-scr%sr(2,1) ! y width
 
 
 end subroutine loadScreenData !}}}
@@ -556,7 +559,8 @@ use fbMod
 use controlMod
 use inputShareMod !for col, rng, h, md
 implicit none
-integer :: wc, error
+integer :: wc
+integer, intent(out) :: error
 character(*) :: s
 character(80) :: word, tmp, word2
 integer :: i, j, k, c(4), mo, mj
@@ -575,7 +579,9 @@ word = s_get_word( 1, s )
 
 select case(trim(word))
   case ("help"); call commandHelp; run=.false. 
-  case ("q","exit","quit"); error=1 ! this will flag as error and kill program
+  case ("q","exit","quit"); error=-1 ! this will flag as error and kill program
+  case ("echo"); write(6,'(A)') s(6:); call flush(6)
+  case ("exec"); call execute_command_line( s(6:), WAIT=.true. ) 
   case ("fbpath");      if (wc>1) then; scr%fbpath = s_get_word(2, s)
    else; write(6,*) trim(scr%fbpath); run=.false.; endif
   case ("dumpFile");    if (wc>1) then; scr%dumpName = s_get_word(2, s)
@@ -594,6 +600,8 @@ select case(trim(word))
    call s_get_val(3, s, scr%sr(1,1) )
    call s_get_val(4, s, scr%sr(2,2) )
    call s_get_val(5, s, scr%sr(1,2) )
+   scr%sr_x = scr%sr(1,2)-scr%sr(1,1) ! x width for 3d screen
+   scr%sr_y = scr%sr(2,2)-scr%sr(2,1) ! y width
    else; write(6,*) scr%sr(2,1), scr%sr(1,1), scr%sr(2,2), scr%sr(1,2); run=.false.; endif
   case ("timestep");    if (wc>1) then; call s_get_val(2, s, scr%dt )
    else; write(6,*) scr%dt; run=.false.; endif
@@ -710,6 +718,9 @@ select case(trim(word))
    q1(1) = 0.0; q1(2:4) = scr%globalrotor(2:4) !axis portion
    call quatrotor( q1, scr%globalrotor(1), q2 )
    scr%globalrotor = q2
+  case("dynamics") ; call objectDynamics
+  case("draw") ; call drawObjects
+  case("fbinit") ; call fb%fbinit(10,scr%fbpath, scr%width, scr%height, scr%line, .true. )
   case("universe") ; scr%UniGeom = trim(s_get_word(2, s))
    if (trim(scr%UniGeom).eq."sphere") then
     call s_get_val(3, s, scr%UniParms(1))
@@ -729,6 +740,11 @@ select case(trim(word))
   case("run"); run=.true. !stop animation
   case("record"); if (record) then; record=.false.; else; record = .true.; endif
   case("picture","scrot"); scrot=.true. !record every frame
+    if (.not.scr%interactive.and.wc.ge.2) then
+      tmp = s_get_word(2, s)
+      call fb%save(trim(tmp),2)
+      scrot=.false.
+    endif
   case("impulseControl"); impulseControl=.true. 
   case("spatialControl"); impulseControl=.false. 
   case("redraw"); call fb%display !redraw the screen based on current and last rendering
@@ -1004,6 +1020,8 @@ select case(trim(word))
       call s_get_val(7, s, p(3) )
       o(i)%point(:,j) = o(i)%point(:,j) + p
      endif
+    case default
+     write(6,'(A)') CR//"object option not recognized:"//trim(word2)
    end select !}}}
  
   case default; write(6,'(A)') "don't have interpretation for: '"//trim(word)//"'"//achar(13)
@@ -2274,13 +2292,15 @@ end subroutine drawObjects !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine commandHelp !{{{
 integer :: i, n
-character(80), dimension(66) :: c
+character(80), dimension(71) :: c
 n = 0
 c(:) =""
 n=n+1;c(n)="Commands that take parameters show their values when executed sans parms"
 n=n+1;c(n)="Command Parameters  Description"
 n=n+1;c(n)=" help               Displays this help message"
 n=n+1;c(n)=" q,quit,exit        terminates the program"
+n=n+1;c(n)=" echo               displays anything else on line to the screen"
+n=n+1;c(n)=" exec               executes anything else on line as shell command"
 n=n+1;c(n)=" fbpath F           path to framebuffer device, must have write permissions"
 !n=n+1;c(n)=" starfile F         path to star file for background stars"
 n=n+1;c(n)=" dumpfile F         path for dump file for keyboard screenshots"
@@ -2302,7 +2322,7 @@ n=n+1;c(n)=" NobjectBuff N      allocate the object buffer to this many objects.
 n=n+1;c(n)="                     WARNING will delete all existing objects"
 n=n+1;c(n)=" LoadObject FILE    will load object from file FILE"
 n=n+1;c(n)=" dataColumns i(8)   list the column numbers of a data file that correspond to"
-n=n+1;c(n)="                     x,y,z,radius,transparency,color(3). color depends on dataColor"
+n=n+1;c(n)="           x,y,z,radius,transparency,color(3). color depends on dataColor"
 n=n+1;c(n)=" dataRange [xyzrthsvRGB] min max    corresponding to the data in the data file."
 n=n+1;c(n)=" dataColorHSV       indicate that color(3) specified in dataColumns are HSV"
 n=n+1;c(n)=" dataColorRGB       indicate that color(3) specified in dataColumns are RGB"
@@ -2314,10 +2334,13 @@ n=n+1;c(n)=" camera_orient a u v w  angle-axis orientation of camera"
 n=n+1;c(n)=" universe c x y z   set a universal shape (c=box|sphere), size parameters"
 n=n+1;c(n)=" periodic           sets the universal size to be periodic else will rebound"
 n=n+1;c(n)=" fbclear            clear the pixel buffer"
-n=n+1;c(n)=" redraw             writes the current pixel buffer to the frame buffer"
+n=n+1;c(n)=" dynamics           run one step of object dynamics to update relative vectors"
+n=n+1;c(n)=" fbinit             initializes the framebuffer, needed for 'draw'"
+n=n+1;c(n)=" draw               draws current objects to the display buffer (not screen)"
+n=n+1;c(n)=" redraw             writes the current pixel buffer to the frame buffer (screen)"
 n=n+1;c(n)=" pause              stops rendering animation"
 n=n+1;c(n)=" run                resumes rendering animation"
-n=n+1;c(n)=" picture            take a screen shot"
+n=n+1;c(n)=" picture [file]     take a screen shot, if 'file' is not given, file='dumpfile'"
 n=n+1;c(n)=" record             toggle recording mode (video)"
 n=n+1;c(n)=" follow I           camera follows surface of object I"
 n=n+1;c(n)=" impulseControl     set input key mode to impulse"

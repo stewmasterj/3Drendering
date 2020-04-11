@@ -1,5 +1,8 @@
 # view - Fortran fast 3D renderer to a linux framebuffer device
 
+Example asteroids game:
+![alt text](https://github.com/stewmasterj/3Drendering/blob/master/screenshots/asteroids2.gif "run scenes/asteroids.rc")
+
 ## features
 
 Uses quaternion multiplication for smooth rotation of spatial vectors.
@@ -41,18 +44,19 @@ The `view` program allows for an internal commandline capability when ":" is pre
 The subroutine is called from `renderMod` to read the line and interpret the duty.  
 These commands can also be used in the `scene.rc` files to setup the initial scene.
 
-Commands that take parameters show their values when executed sans parms  
+### Commands that take parameters show their values when executed sans parms  
 
-### Command Parameters  Description  
-| help         |      Displays this help message | 
-|:-------------|:--------------------------------|
+| Command Parameters | Description |  
+|:-------------|:--------------------------------|  
+|` help              ` |Displays this help message | 
 |` q,quit,exit       ` |terminates the program|  
+|` echo              ` |displays anything else on line to the screen|  
+|` exec              ` |executes anything else on line as shell command|  
 |` fbpath F          ` |path to framebuffer device, must have write permissions|  
 |` dumpfile F        ` |path for dump file for keyboard screenshots|  
 |` tmpdir F          ` |path to a temporary directory for scratch files|  
 |` interactive       ` |puts program into interactive rather than single render|  
-|` contact N         ` |calculates contact conditions for dynamic objects; N is the|  
-|`                   ` | type of contact algorithm, 0=off, 1=elastic-Frictionless|  
+|` contact N         ` |calculates contact conditions for dynamic objects; N is the type of contact algorithm, 0=off, 1=elastic-Frictionless|  
 |` FOV x y           ` |field of view angles (radians)|  
 |` subscreen x1 y1 x2 y2` |pixel ranges, top-left and bottom right, (row column)|  
 |` timestep r        ` |time between frames for animation|  
@@ -62,8 +66,7 @@ Commands that take parameters show their values when executed sans parms
 |` height n          ` |pixel height of screen|  
 |` timeout n         ` |animation steps to run|  
 |` linelength N      ` |frame buffer line length Bytes|  
-|` NobjectBuff N     ` |allocate the object buffer to this many objects.|  
-|`                   ` | WARNING will delete all existing objects|  
+|` NobjectBuff N     ` |allocate the object buffer to this many objects. WARNING will delete all existing objects|  
 |` LoadObject FILE   ` |will load object from file FILE|  
 |` dataColumns i(8)  ` |list the column numbers of a data file that correspond to x,y,z,radius,transparency,color(3). color depends on dataColor|  
 |` dataRange [xyzrthsvRGB] min max ` |corresponding to the data in the data file.|  
@@ -76,10 +79,13 @@ Commands that take parameters show their values when executed sans parms
 |` universe c x y z  ` |set a universal shape (c=box|sphere), size parameters|  
 |` periodic          ` |sets the universal size to be periodic else will rebound|  
 |` fbclear           ` |clear the pixel buffer|  
+|` dynamics          ` |run one step of object dynamics to update relative vectors|  
+|` fbinit            ` |initializes the framebuffer, needed for 'draw'|  
+|` draw              ` | draws current objects to the display buffer (not screen)|  
 |` redraw            ` |writes the current pixel buffer to the frame buffer|  
 |` pause             ` |stops rendering animation|  
 |` run               ` |resumes rendering animation|  
-|` picture           ` |take a screen shot|  
+|` picture [F]       ` |take a screen shot, if F is not given, F='dumpfile'|  
 |` record            ` |toggle recording mode (video)|  
 |` follow I          ` |camera follows surface of object I|  
 |` impulseControl    ` |set input key mode to impulse|  
@@ -87,8 +93,7 @@ Commands that take parameters show their values when executed sans parms
 |` cpo I J (K)       ` |copy object ID I to J (through K)|  
 |` nearest,closest   ` |reports the nearest vertex relative sph position and obj|  
 |` underAim          ` |reports the obj, tri, and node at center of screen|  
-|` o I c             ` |object ID 'I' definition 'c'|  
-|    |object command 'c' can be:|  
+|` o I c             ` |object ID 'I' definition 'c' object command 'c' can be:|  
 |`     save s        ` | save this object as file name 's'|  
 |`     name s        ` | set name of object 'I'|  
 |`     mode s        ` | set render mode of object 'I', (point|wire|solid)|  
@@ -105,6 +110,7 @@ Commands that take parameters show their values when executed sans parms
 |`     color J r g b ` | set color of point 'J' in object 'I' (J=0 for all points)|  
 |`     smooth J k    ` | set smoothness of point J in object I (J=0 for all points)|   
 |` orand c i j  v(:) ` | randomizes objects i-j property 'c' with ranges v(:)|  
+|----------------------|-------------------------------------------------------|  
 
 
 # Future Work
