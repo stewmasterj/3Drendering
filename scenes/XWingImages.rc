@@ -40,6 +40,7 @@ o 1 spin 0.0 0.0 0.0 1.0 # stop spin
 fbinit   # needed when manually calling 'draw'
 
 dynamics # set relative vectors for objects
+#bgColor 255 255 255
 draw     # draw to buffer
 picture X.ppm
 echo wrote image X
@@ -47,6 +48,7 @@ echo wrote image X
 fbclear
 o 1 orient -1.5709 0.0 1.0 0.0
 dynamics # set relative vectors for objects
+#bgColor 255 255 255
 draw     # draw to buffer
 picture Y.ppm
 echo wrote image Y
@@ -54,6 +56,7 @@ echo wrote image Y
 fbclear
 o 1 orient -1.5709 0.0 0.0 1.0
 dynamics # set relative vectors for objects
+#bgColor 255 255 255
 draw     # draw to buffer
 picture Z.ppm
 echo wrote image Z

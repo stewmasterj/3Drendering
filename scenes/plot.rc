@@ -84,7 +84,7 @@ o 1 spin 0.02   0.0 1.0 -1.0 #slow spin
 #orand offset 1 20  -50.0 50.0  -50.0 50.0  -50.0 50.0
 #orand velocity 1 20  -20.0 20.0  -20.0 20.0  -20.0 20.0
 #orand spin 1 20  -0.05 0.05   0.0 1.0  0.0 1.0  0.0 1.0
-
+#bgColor 255 255 255
 dumpFile	dmp.ppm	# basename to dump render view to PPM files
 #timeout		150	# number of steps to run interactive renderer
 

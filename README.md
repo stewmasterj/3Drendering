@@ -81,6 +81,7 @@ These commands can also be used in the `scene.rc` files to setup the initial sce
 |` fbclear           ` |clear the pixel buffer|  
 |` dynamics          ` |run one step of object dynamics to update relative vectors|  
 |` fbinit            ` |initializes the framebuffer, needed for 'draw'|  
+|` bgColor C(3)      ` |draw a filled rectangle in subscreen with RGB color C(3)|  
 |` draw              ` | draws current objects to the display buffer (not screen)|  
 |` redraw            ` |writes the current pixel buffer to the frame buffer|  
 |` pause             ` |stops rendering animation|  

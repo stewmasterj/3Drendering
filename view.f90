@@ -47,7 +47,7 @@ call CPU_TIME(start_time)
 ! Default values !!!!!!{{{
 call getOptions
 ! load init script commands
-call loadScreenData( 10, FILscreen )
+call loadScreenData( 11, FILscreen )
 
 axisX = (/ 1.0, 0.0, 0.0 /) 
 axisY = (/ 0.0, 1.0, 0.0 /) 

@@ -53,6 +53,7 @@ type screen
  character(10) :: UniGeom !sphere or box or null
  logical :: periodic   !fold positions or rebound
  real(4), dimension(3) :: UniParms ! parameters (r for sphere, L(x,y,z) for  box)
+ character(4) :: bgpx
 end type
 
 
@@ -467,6 +468,7 @@ scr%UniParms(:) = 0.0
 
 scr%seed(1) = 123456789
 scr%globalrotor = (/ 0.0, 1.0, 1.0, 1.0 /) !initial angle-axis notation
+scr%bgpx = char(0)//char(0)//char(0)//char(0)
 
 ! camera object data
 cam%name = "Camera"
@@ -517,7 +519,7 @@ ln = 0
 do 
   line = getLine( FD, ln, err )
 !write(6,'(i3,x,A)') ln,trim(line) !echo the read line
-  if (err.ne.0) exit 
+  if (err.ne.0) then ; err=0; exit ; endif
   if (len(trim(line)).le.0) cycle
   call interpretLine( line, err )
   if (err.gt.0) then
@@ -529,7 +531,7 @@ enddo
 close(FD)
 call flush(0)
 call flush(6)
-if (err.ne.0) STOP
+if (err.ne.0) STOP "done reading input config."
 
 if (.not.allocated(o)) allocate( o(ObjectBufferSize) )
 
@@ -720,6 +722,11 @@ select case(trim(word))
    scr%globalrotor = q2
   case("dynamics") ; call objectDynamics
   case("draw") ; call drawObjects
+  case("bgColor") ; c=0; if (wc>1) call s_get_val(2, s, c(3))
+    if (wc>2)  call s_get_val(3, s, c(2))
+    if (wc>3)  call s_get_val(4, s, c(1))
+    if (wc.eq.1) then; write(6,*) c(3),c(2),c(1), " ", c(4); endif
+    if (wc>1) scr%bgpx = char(c(1))//char(c(2))//char(c(3))//char(c(4))
   case("fbinit") ; call fb%fbinit(10,scr%fbpath, scr%width, scr%height, scr%line, .true. )
   case("universe") ; scr%UniGeom = trim(s_get_word(2, s))
    if (trim(scr%UniGeom).eq."sphere") then
@@ -2024,6 +2031,9 @@ cx = scr%sr_x/2 + scr%sr(1,1)
 cy = scr%sr_y/2 + scr%sr(2,1)
 ozb = fb%zbuff(cx,cy) !old zbuff value at center of screen
 
+! clear the subscreen with the background color
+call fb%fillrec(scr%sr(1,1),scr%sr(2,1), scr%sr(1,2),scr%sr(2,2), scr%bgpx )
+
 do n = 0, Nobjects
 
  if (o(n)%np.eq.0) cycle !object has no points and thus no triangles to render
@@ -2292,7 +2302,7 @@ end subroutine drawObjects !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine commandHelp !{{{
 integer :: i, n
-character(80), dimension(71) :: c
+character(80), dimension(73) :: c
 n = 0
 c(:) =""
 n=n+1;c(n)="Commands that take parameters show their values when executed sans parms"
@@ -2329,6 +2339,7 @@ n=n+1;c(n)=" dataColorRGB       indicate that color(3) specified in dataColumns 
 n=n+1;c(n)=" dataPoint [point,circ,fcirc,sph,cloud]    object mode type for data points"
 n=n+1;c(n)=" LoadData FILE      FILE is a data file with columns, e.g. CSV, SSV."
 n=n+1;c(n)="                     loads into the next available object."
+n=n+1;c(n)=" saveObject I F     Save object ID=I to file=F. Same as: o I save F"
 n=n+1;c(n)=" camera_pos x y z   location of camera" 
 n=n+1;c(n)=" camera_orient a u v w  angle-axis orientation of camera" 
 n=n+1;c(n)=" universe c x y z   set a universal shape (c=box|sphere), size parameters"
@@ -2336,6 +2347,7 @@ n=n+1;c(n)=" periodic           sets the universal size to be periodic else will
 n=n+1;c(n)=" fbclear            clear the pixel buffer"
 n=n+1;c(n)=" dynamics           run one step of object dynamics to update relative vectors"
 n=n+1;c(n)=" fbinit             initializes the framebuffer, needed for 'draw'"
+n=n+1;c(n)=" bgColor C(3)       draw a filled rectange in subscreen with RGB colour C(3)"
 n=n+1;c(n)=" draw               draws current objects to the display buffer (not screen)"
 n=n+1;c(n)=" redraw             writes the current pixel buffer to the frame buffer (screen)"
 n=n+1;c(n)=" pause              stops rendering animation"
