@@ -52,7 +52,7 @@ dataPoint cloud #sph #point, circ, fcirc, sph, cloud
 #dataColumns 1 2 3 4 0 6 0 0 #(x,y,z,r,t,h,s,v)
 dataColumns 1 2 3 0 5 6 7 8 #(x,y,z,r,t,R,G,B)
 dataRanges r 0.707 0.707
-#dataRanges t 128 # half transparent spheres
+dataRanges t 0 255 # half transparent spheres
 #dataRanges h -4553.0 -3875.0
 #dataRanges s 255 # full saturation
 #dataRanges v 255 # full value

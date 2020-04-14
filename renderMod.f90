@@ -214,8 +214,8 @@ type(object), intent(inout) :: obj
 !logical, intent(in) :: h ! is the input color columns for HSV?
 ! internal
 character(80) :: line
-integer :: FD, err, i, j, ln, c(3), r(3), skip
-real(4) :: p(3), mr(2,8), q1(4), q2(4)
+integer :: FD, err, i, j, ln, c(4), r(3), skip
+real(4) :: p(4), mr(2,8), q1(4), q2(4)
 real(4), allocatable, dimension(:) :: dum
 
 ! allocate dummy for max needed columns
@@ -349,22 +349,27 @@ do i = 1, obj%np
  read(FD,*,iostat=err) dum(:)
  ! color stuff
  ! normalize column value to color range
- do j = 1, 3
-  if (col(j+5).eq.0.or.abs(rng(1,j+5)-rng(2,j+5)).lt.1.e-12) then
-   p(j) = rng(1,j+5)
+ do j = 1, 4
+  if (col(j+4).eq.0.or.abs(rng(1,j+4)-rng(2,j+4)).lt.1.e-12) then
+   p(j) = rng(1,j+4)
    c(j) = nint(p(j))
   else
-   p(j) = max( min(dum(col(5+j)),rng(2,5+j)) ,rng(1,5+j)) ! fit the value within the range
-   p(j) = (p(j)-rng(1,5+j))/(rng(2,5+j)-rng(1,5+j))  ! fraction within the range
+   if (rng(1,4+j).lt.rng(2,4+j)) then
+     p(j) = max( min(dum(col(4+j)),rng(2,4+j)) ,rng(1,4+j)) ! fit the value within the range
+   else
+     p(j) = max( min(dum(col(4+j)),rng(1,4+j)) ,rng(2,4+j)) ! fit the value within the range
+   endif
+   p(j) = (p(j)-rng(1,4+j))/(rng(2,4+j)-rng(1,4+j))  ! fraction within the range
    c(j) = nint(p(j)*255.0)
   endif
  enddo ! j
  if (h) then ! provided as HSV values, need them in RGB
-  call HSV2RGB( c(1),c(2),c(3), r(1),r(2),r(3) )
+  call HSV2RGB( c(2),c(3),c(4), r(1),r(2),r(3) )
   obj%color(1:3,i) = r(1:3)
  else ! they are already in RGB
-  obj%color(1:3,i) = c(1:3)
+  obj%color(1:3,i) = c(2:4)
  endif
+ obj%vertnorm(2,i) = real(c(1))
 
 enddo
 
@@ -1081,12 +1086,11 @@ o%mass = o%mass*scl*scl*scl
 end subroutine objectScale !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine sortNodes( o ) !{{{
-! sorts the node distances near to far, sorted IDs in sortID
-! Sort algorithm by John Mahaffy March 10, 1995
+! sorts the node distances far to near, sorted IDs in sortID
 class(object) :: o
-integer :: i, swap1, t
-integer, dimension(1) :: swap
-real(4) :: temp
+integer :: i !, swap1, t
+!integer, dimension(1) :: swap
+!real(4) :: temp
 real(4), allocatable, dimension(:) :: p
 
 if (.not.allocated(o%sortID)) allocate( o%sortID(o%np) )
@@ -1097,19 +1101,22 @@ do i = 1, o%np
   o%sortID(i) = i ! set the index ID
 enddo
 
-do i = 1, o%np ! sort minimum distance to greatest
-  !swap = MINLOC( o%sp(1,i:o%np) ) ! sort by distance
-  swap = MAXLOC( p(i:o%np) ) ! sort by distance
-  swap1 = swap(1) +i -1
-  if (swap1.ne.i) then
-    temp = p(i)
-    p(i) = p(swap1)
-    p(swap1) = temp
-    t = o%sortID(i)
-    o%sortID(i) = o%sortID(swap1)
-    o%sortID(swap1) = t
-  endif
-enddo
+call hpsort_eps_epw( o%np, p, o%sortID, 1.e-10)
+
+! Sort algorithm by John Mahaffy March 10, 1995
+!do i = 1, o%np ! sort minimum distance to greatest
+!  !swap = MINLOC( o%sp(1,i:o%np) ) ! sort by distance
+!  swap = MAXLOC( p(i:o%np) ) ! sort by distance
+!  swap1 = swap(1) +i -1
+!  if (swap1.ne.i) then
+!    temp = p(i)
+!    p(i) = p(swap1)
+!    p(swap1) = temp
+!    t = o%sortID(i)
+!    o%sortID(i) = o%sortID(swap1)
+!    o%sortID(swap1) = t
+!  endif
+!enddo
 
 !do i = 1, o%np
 !  write(0,*) o%sp(1,i), p(i), o%sortID(i)
@@ -2051,7 +2058,7 @@ do n = 0, Nobjects
   ! print points to screen if within Field of View (FOV)
   do ii = 1, o(n)%np
     if (sorted) then
-      i = o(n)%sortID(ii) ! sorted far to near
+      i = o(n)%sortID(o(n)%np-ii+1) ! sorted far to near
     else; i = ii; endif
     if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
     if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle
@@ -2074,7 +2081,7 @@ do n = 0, Nobjects
   ! print points to screen if within Field of View (FOV)
   do ii = 1, o(n)%np
     if (sorted) then
-      i = o(n)%sortID(ii) ! sorted far to near
+      i = o(n)%sortID(o(n)%np-ii+1) ! sorted far to near
     else; i = ii; endif
     if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
     if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle
@@ -2103,7 +2110,7 @@ do n = 0, Nobjects
   ! print points to screen if within Field of View (FOV)
   do ii = 1, o(n)%np
     if (sorted) then
-      i = o(n)%sortID(ii) ! sorted far to near
+      i = o(n)%sortID(o(n)%np-ii+1) ! sorted far to near
     else; i = ii; endif
     if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
     if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle
@@ -2131,7 +2138,7 @@ do n = 0, Nobjects
   ! print points to screen if within Field of View (FOV)
   do ii = 1, o(n)%np
     if (sorted) then
-      i = o(n)%sortID(ii) ! sorted far to near
+      i = o(n)%sortID(o(n)%np-ii+1) ! sorted far to near
     else; i = ii; endif
     if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
     if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle
@@ -2159,7 +2166,7 @@ do n = 0, Nobjects
   ! print points to screen if within Field of View (FOV)
   do ii = 1, o(n)%np
     if (sorted) then
-      i = o(n)%sortID(ii) ! sorted far to near
+      i = o(n)%sortID(o(n)%np-ii+1) ! sorted far to near
     else; i = ii; endif
     if (o(n)%sp(3,i).lt.-0.5*scr%FOVx.or.o(n)%sp(3,i).gt.0.5*scr%FOVx) cycle
     if (o(n)%sp(2,i).lt.0.5*(pi-scr%FOVy).or.o(n)%sp(2,i).gt.0.5*(scr%FOVy+pi)) cycle

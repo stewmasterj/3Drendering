@@ -5,8 +5,8 @@ FC=gfortran
 CC=gcc
 #FCFLAGS= -Ofast -march=native -funsafe-math-optimizations
 #FCFLAGS= -O3
-FCFLAGS= -O -g -fbounds-check -Wuninitialized -Wsurprising -Wall -Wextra
-#FCFLAGS= -fcheck=all -ffpe-trap=invalid,zero,overflow -g -Wall -Wextra -Werror #-pedantic
+#FCFLAGS= -O -g -fbounds-check -Wuninitialized -Wsurprising -Wall -Wextra
+FCFLAGS= -fcheck=all -ffpe-trap=invalid,zero,overflow -g -Wall -Wextra -Werror #-pedantic
 #FCFLAGS += -I/usr/include
 FOMP= #-fopenmp
 
@@ -16,7 +16,7 @@ PROGRAM = view
 #all: $(PROGRAM)
 
 # list all source files
-OBJ = kbhit.o quaternion.o fcurses.o fbMod2.o lineParse.o shareMods.o renderMod.o ArgsMod.o view.o
+OBJ = kbhit.o quaternion.o fcurses.o fbMod2.o lineParse.o heapSort.o shareMods.o renderMod.o ArgsMod.o view.o
 
 # General rule for building prog from prog.o; $^ (GNU extension) is
 # used in order to list additional object files on which the
