@@ -1,6 +1,7 @@
 #!../view -s 
 # vim: syntax=sh
 # screen data file
+DEBUG
 fbpath	/dev/fb0	#framebuffer device path
 #fbpath	fb.raw #if not framebuffer device  choose file name
 width	1440	#resolution of framebuffer

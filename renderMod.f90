@@ -438,7 +438,8 @@ close(FD)
 
 end subroutine saveObject !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
-subroutine loadScreenData( FD, fl ) !{{{
+!subroutine loadScreenData( FD, fl ) 
+subroutine initVars !{{{
 ! read screen data from file descriptor FD and file name fl
 use lineParse
 use quaternion
@@ -446,8 +447,8 @@ use quaternion
 use controlMod
 use inputShareMod !for col, rng, h, md
 implicit none
-character(80) :: fl, line
-integer :: FD, err, ln
+!character(80) :: fl !, line
+!integer :: FD !, err, ln
 real(4) :: q1(4), q2(4)
 
 scr%fbpath = "/dev/fb0"
@@ -516,45 +517,32 @@ rng(:,4) = 1.0 ! radius
 h = .true.
 md = "point"
 
-open(FD,file=trim(fl),iostat=err)
-if (err.ne.0) then
-  STOP "ERROR opening scene file:"//trim(fl)
-endif
-ln = 0
-do 
-  line = getLine( FD, ln, err )
-!write(6,'(i3,x,A)') ln,trim(line) !echo the read line
-  if (err.ne.0) then ; err=0; exit ; endif
-  if (len(trim(line)).le.0) cycle
-  call interpretLine( line, err )
-  if (err.gt.0) then
-    write(0,*) "ERROR: interpreting line: ",ln," of file:"//trim(fl)
-    exit
-  endif
-  if (err.lt.0) exit !user defined exit
-enddo
-close(FD)
-call flush(0)
-call flush(6)
-if (err.ne.0) STOP "done reading input config."
+!open(FD,file=trim(fl),iostat=err)
+!if (err.ne.0) then
+!  STOP "ERROR opening scene file:"//trim(fl)
+!endif
+!ln = 0
+!do 
+!  line = getLine( FD, ln, err )
+!!write(6,'(i3,x,A)') ln,trim(line) !echo the read line
+!  if (err.ne.0) then ; err=0; exit ; endif
+!  if (len(trim(line)).le.0) cycle
+!  call interpretLine( line, err )
+!  if (err.gt.0) then
+!    write(0,*) "ERROR: interpreting line: ",ln," of file:"//trim(fl)
+!    exit
+!  endif
+!  if (err.lt.0) exit !user defined exit
+!enddo
+!close(FD)
+!call flush(0)
+!call flush(6)
+!if (err.ne.0) STOP "done reading input config."
 
-if (.not.allocated(o)) allocate( o(ObjectBufferSize) )
+!if (.not.allocated(o)) allocate( o(ObjectBufferSize) )
 
-! convert angle axis notation into actual quaternion rotors
-!q1(1) = 0.0; q1(2:4) = scr%camerarotor(2:4) !axis portion
-!call quatrotor( q1, scr%camerarotor(1), q2 )
-!scr%camerarotor = q2
-
-!q1(1) = 0.0; q1(2:4) = scr%camera_spin(2:4) !axis portion
-!call quatrotor( q1, scr%camera_spin(1), q2 )
-!scr%camera_spin = q2
-
-
-!scr%sr_x = scr%sr(1,2)-scr%sr(1,1) ! x width for 3d screen
-!scr%sr_y = scr%sr(2,2)-scr%sr(2,1) ! y width
-
-
-end subroutine loadScreenData !}}}
+!end subroutine loadScreenData 
+end subroutine initVars !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
 subroutine interpretLine( s, error ) !{{{
 ! this routine could be used to set variables or perform complex things that a
@@ -1036,7 +1024,9 @@ select case(trim(word))
      write(6,'(A)') CR//"object option not recognized:"//trim(word2)
    end select !}}}
  
-  case default; write(6,'(A)') "don't have interpretation for: '"//trim(word)//"'"//achar(13)
+  case default
+   error = -2 ! command not found
+   !write(6,'(A)') "don't have interpretation for: '"//trim(word)//"'"//achar(13)
 end select
 
 end subroutine interpretLine !}}}

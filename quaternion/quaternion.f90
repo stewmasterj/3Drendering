@@ -202,6 +202,10 @@ ang = ACOS(dot_product(a,b)/(da*db))
 
 call cross_product(a/da,b/db,ax) ! get the rotation axis
 da = SQRT(dot_product(ax,ax))
+if (abs(da).lt.1.e-10) then
+ c(2:4) = a; c(1) = 0.0
+ return
+endif
 
 q=0.0
 q(2:4) = ax/da !set rotation axis

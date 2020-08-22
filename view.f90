@@ -19,6 +19,7 @@ use quaternion
 use fbMod
 use fcurses
 use renderMod
+use scriptMod ! for load and runscript  input file
 ! internal modules
 use screenstuff
 use controlMod
@@ -35,7 +36,7 @@ end interface
 real(4), dimension(4) :: qrl, qrr, qru, qrd, qrw, qrc, qr
 real(4), dimension(4) :: qtmp, qtmp2 !temps
 real(4), dimension(3) :: vt, normal, p1, p2, p3, w, n1,n2,n3, p
-integer ::  t, err, ct, i, j, k
+integer ::  t, err, ct, i, j, k, nWheel
 integer, dimension(1) :: mj
 !!! for fcurses
 character, dimension(5) :: ch
@@ -45,10 +46,19 @@ real(4) :: start_time, end_time
 
 call CPU_TIME(start_time)
 ! Default values !!!!!!{{{
-call getOptions
-! load init script commands
-call loadScreenData( 11, FILscreen )
+call getOptions ! from command line
 
+! load init script commands
+!call loadScreenData( 11, FILscreen )
+call initVars  ! initialize rendering variables
+
+! load and run input script
+call loadScript( 11, trim(FILscreen) )
+call runScript
+call flush(0); call flush(6)
+if (.not.allocated(o)) allocate( o(ObjectBufferSize) )
+
+! initial values for interactive controls
 axisX = (/ 1.0, 0.0, 0.0 /) 
 axisY = (/ 0.0, 1.0, 0.0 /) 
 axisZ = (/ 0.0, 0.0, 1.0 /) 
@@ -104,6 +114,7 @@ endif
 t=0
 qr = (/ 1.0, 0.0, 0.0, 0.0 /) !basically a null rotation rotor
 vt = 0.0 
+nWheel = 0 ! steering wheel increment *scr%dtheta for curvature
 do !main do loop for capturing keys
  call usleep(nint(scr%dt*1e6)) !save CPU cycle time by polling keyboard 100 times per second
  t = t + 1
@@ -118,8 +129,8 @@ do !main do loop for capturing keys
    if (ch(2).eq.'[') then     !usualy begin with '['
      Fc=ch(3)//ch(4)//ch(5)    !curser keys work
      ! rotation motions
-     if (Fc.eq.'D  '    ) then; qr=qrl; rotate=.true. !LEFT
-     elseif (Fc.eq.'C  ') then; qr=qrr; rotate=.true. !RIGHT
+     if (Fc.eq.'D  '    ) then; qr=qrl; rotate=.true.; nWheel=nWheel+1 !LEFT
+     elseif (Fc.eq.'C  ') then; qr=qrr; rotate=.true.; nWheel=nWheel-1 !RIGHT
      elseif (Fc.eq.'A  ') then; qr=qru; rotate=.true. !UP
      elseif (Fc.eq.'B  ') then; qr=qrd; rotate=.true. !DOWN
      elseif (Fc.eq.'21~') then   !F10 Quit Exit
@@ -131,15 +142,16 @@ do !main do loop for capturing keys
       STOP
      endif
    endif
-  case ('q') ; qr=qrw; rotate=.true.   !left rudder, widdershins
-  case ('e') ; qr=qrc; rotate=.true.   !right rudder, clockwise
+  case ('q') ; qr=qrw; rotate=.true.; nWheel=nWheel+1   !left rudder, widdershins
+  case ('e') ; qr=qrc; rotate=.true.; nWheel=nWheel-1   !right rudder, clockwise
   ! translation motion
-  case ('W') ; vt=caZ; translate=.true.   !move up
+  case ('W') ; vt= caZ; translate=.true.   !move up
   case ('S') ; vt=-caZ; translate=.true.   !move down
-  case ('w') ; vt=caX; translate=.true.   !move forward
+  case ('w') ; vt= caX; translate=.true.   !move forward
   case ('s') ; vt=-caX; translate=.true.   !move backward
   case ('a') ; vt=-caY; translate=.true.   !straf left
-  case ('d') ; vt=caY; translate=.true.   !straf right
+  case ('d') ; vt= caY; translate=.true.   !straf right
+  ! END Motion Control
   case ('r') ; if (record) then; record=.false.; else; record = .true.; endif
   case ('p') ; scrot=.true.
   ! select node or triangle
@@ -239,9 +251,10 @@ do !main do loop for capturing keys
  !stuff that happens independent of key strokes, like environmental dynamics
  if (rotate.or.impulseControl) then
   ! rotate the global rotor by qr
-  call quatmult( cam%spin, scr%globalrotor, qtmp2 )
-  scr%globalrotor = qtmp2
-  if (Ofollow.gt.0) then
+  if (Ofollow.le.0) then ! not following, normal operation
+    call quatmult( cam%spin, scr%globalrotor, qtmp2 )
+    scr%globalrotor = qtmp2
+  elseif (Ofollow.gt.0) then ! following i.e. Driving
     ! rotate orientation to follow local "horizon"
     ! closest vertex in object
     mj = minloc(o(Ofollow)%sp(1,:))
@@ -286,8 +299,21 @@ do !main do loop for capturing keys
     call ab2rotor( (/ 0.0,0.0,1.0 /), normal, qtmp) 
     !qtmp(2:4) = -qtmp(2:4)
 !write(0,*) char(13),normal, ACOS(dot_product(normal, (/ 0.0,0.0,1.0 /) ))
-    call quatmult( qtmp, scr%globalrotor, qtmp2 )
+    if (abs(qtmp(1)).gt.1.e-10) then ! if there is an angle to rotate to
+      call quatmult( qtmp, scr%globalrotor, qtmp2 )
+      scr%globalrotor = qtmp2
+    endif
+    ! interpret input spin as a curvature, thus spin = vel/TurnRadius  
+    qtmp(1) = sqrt(dot_product(cam%velocity,cam%velocity))*real(nWheel)*scr%dtheta*0.05
+    qtmp(2:4) = normal
+    call quatrotor( qtmp, qtmp(1), cam%spin )
+    call quatmult( cam%spin, scr%globalrotor, qtmp2 )
     scr%globalrotor = qtmp2
+    ! Rotate camera velocity with the angle change, as if following a turning radius
+    qtmp = cam%spin; qtmp(1) = -qtmp(1) ! negate this
+    call quat3rotate( cam%velocity, qtmp, qtmp2(2:4) )
+    cam%velocity = qtmp2(2:4)
+    
   endif
   ! inverse of the globalrotor is a rotor that rotates back to global coordinates
   call quatinv( scr%globalrotor, cam%orient )

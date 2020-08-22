@@ -16,7 +16,7 @@ PROGRAM = view
 #all: $(PROGRAM)
 
 # list all source files
-OBJ = kbhit.o quaternion.o fcurses.o fbMod2.o lineParse.o heapSort.o shareMods.o renderMod.o ArgsMod.o view.o
+OBJ = kbhit.o quaternion.o fcurses.o fbMod2.o lineParse.o heapSort.o shareMods.o renderMod.o scriptMod.o ArgsMod.o view.o
 
 # General rule for building prog from prog.o; $^ (GNU extension) is
 # used in order to list additional object files on which the
@@ -43,7 +43,7 @@ kbhit.o: ../fcurses/kbhit.c
 	$(FC) $(FCFLAGS) -c $<
 %.o: ../fbMod/%.f90
 	$(FC) $(FCFLAGS) -c $<
-%.o: ../stringParseMods/%.f90
+lineParse.o: ../stringParseMods/lineParse.f90
 	$(FC) $(FCFLAGS) -c $<
 %.o: %.f90
 	$(FC) $(FCFLAGS) -c $<
