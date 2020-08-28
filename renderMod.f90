@@ -191,7 +191,7 @@ enddo
 
 end subroutine loadObject !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
-subroutine xyz2Object( FD, fl, obj ) !{{{
+subroutine xyz2Object( FD, fl, obj, npts ) !{{{
 ! read an object from file descriptor FD and file name fl
 ! col : column array from file corresponding to
 ! col(1:3) x,y,z columns
@@ -217,6 +217,7 @@ character(80) :: line
 integer :: FD, err, i, j, ln, c(4), r(3), skip
 real(4) :: p(4), mr(2,8), q1(4), q2(4)
 real(4), allocatable, dimension(:) :: dum
+integer, optional :: npts
 
 ! allocate dummy for max needed columns
 allocate( dum( maxval(col) ) )
@@ -253,20 +254,26 @@ endif
 !if (err.ne.0) exit
 !read(FD,*,iostat=err) ! empty line or comments
 
-! scan the file to get number of points
-i = 0; skip = 0
-do
- read(FD,'(A)',iostat=err) line
- if (IS_IOSTAT_END(err)) exit
- if (line(1:1).eq."#") then; skip = skip + 1; cycle; endif
- i = i + 1
-enddo
-obj%np = i
-write(6,*) "Read xyz file. comments:", skip, " lines:", i
-write(6,*) "rereading..."
+skip = 0
+if (.not.present(npts)) then
+  ! scan the file to get number of points
+  i = 0
+  do
+   read(FD,'(A)',iostat=err) line
+   if (IS_IOSTAT_END(err)) exit
+   if (line(1:1).eq."#") then; skip = skip + 1; cycle; endif
+   i = i + 1
+  enddo
+  obj%np = i
+  write(6,*) "Read xyz file. comments:", skip, " lines:", i
+  write(6,*) "rereading..."
+  
+  rewind(FD)
+  do i = 1, skip; read(FD,*); enddo ! skip the commented header
+else
+  obj%np = npts
+endif
 
-rewind(FD)
-do i = 1, skip; read(FD,*); enddo ! skip the commented header
 
 allocate( obj%point(3,obj%np), obj%color(3,obj%np), obj%smooth(obj%np), stat=err )
 if (err.ne.0) STOP "ERROR: allocating points color smooth from data file"
@@ -309,6 +316,21 @@ do i = 1, obj%np
   obj%vertnorm(2,i) = abs(dum(col(5))) ! point transparency
  endif
  obj%vertnorm(3,i) = 0.0
+ if (col(6).eq.0) then
+  obj%rp(1,i) = rng(1,6) 
+ else
+  obj%rp(1,i) = (dum(col(6))) ! color
+ endif
+ if (col(7).eq.0) then
+  obj%rp(2,i) = rng(1,7) 
+ else
+  obj%rp(2,i) = (dum(col(7))) ! color
+ endif
+ if (col(8).eq.0) then
+  obj%rp(3,i) = rng(1,8) 
+ else
+  obj%rp(3,i) = (dum(col(8))) ! color
+ endif
 
  ! calculate mins and maxes from the data
  do j = 1, 8
@@ -319,6 +341,7 @@ do i = 1, obj%np
  enddo
 enddo
 
+close(FD)
 
 ! set global ranges if not specified in 'rng'
 do j = 1, 8
@@ -340,24 +363,41 @@ write(6,*) "t: ",rng(:,5);     write(6,*) "R,h: ",rng(:,6)
 write(6,*) "G,s: ",rng(:,7);   write(6,*) "B,v: ",rng(:,8)
 
 
-rewind(FD)
-do i = 1, skip; read(FD,*); enddo ! skip the commented header
+!rewind(FD)
+!do i = 1, skip; read(FD,*); enddo ! skip the commented header
 ! if object has a local rotation WRT global, apply it here.
 do i = 1, obj%np
   obj%ip(:,i) = obj%point(:,i) +obj%po(:) !global coordinates
 
- read(FD,*,iostat=err) dum(:)
+ !read(FD,*,iostat=err) dum(:)
  ! color stuff
  ! normalize column value to color range
- do j = 1, 4
+ j = 1
   if (col(j+4).eq.0.or.abs(rng(1,j+4)-rng(2,j+4)).lt.1.e-12) then
    p(j) = rng(1,j+4)
    c(j) = nint(p(j))
   else
    if (rng(1,4+j).lt.rng(2,4+j)) then
-     p(j) = max( min(dum(col(4+j)),rng(2,4+j)) ,rng(1,4+j)) ! fit the value within the range
+     !p(j) = max( min(dum(col(4+j)),rng(2,4+j)) ,rng(1,4+j)) ! fit the value within the range
+     p(j) = max( min( obj%vertnorm(2,i) ,rng(2,4+j)) ,rng(1,4+j)) ! fit the value within the range
    else
-     p(j) = max( min(dum(col(4+j)),rng(1,4+j)) ,rng(2,4+j)) ! fit the value within the range
+     !p(j) = max( min(dum(col(4+j)),rng(1,4+j)) ,rng(2,4+j)) ! fit the value within the range
+     p(j) = max( min( obj%vertnorm(2,i) ,rng(1,4+j)) ,rng(2,4+j)) ! fit the value within the range
+   endif
+   p(j) = (p(j)-rng(1,4+j))/(rng(2,4+j)-rng(1,4+j))  ! fraction within the range
+   c(j) = nint(p(j)*255.0)
+  endif
+ do j = 2, 4
+  if (col(j+4).eq.0.or.abs(rng(1,j+4)-rng(2,j+4)).lt.1.e-12) then
+   p(j) = rng(1,j+4)
+   c(j) = nint(p(j))
+  else
+   if (rng(1,4+j).lt.rng(2,4+j)) then
+     !p(j) = max( min(dum(col(4+j)),rng(2,4+j)) ,rng(1,4+j)) ! fit the value within the range
+     p(j) = max( min( obj%rp(j-1,i) ,rng(2,4+j)) ,rng(1,4+j)) ! fit the value within the range
+   else
+     !p(j) = max( min(dum(col(4+j)),rng(1,4+j)) ,rng(2,4+j)) ! fit the value within the range
+     p(j) = max( min( obj%rp(j-1,i) ,rng(1,4+j)) ,rng(2,4+j)) ! fit the value within the range
    endif
    p(j) = (p(j)-rng(1,4+j))/(rng(2,4+j)-rng(1,4+j))  ! fraction within the range
    c(j) = nint(p(j)*255.0)
@@ -373,7 +413,6 @@ do i = 1, obj%np
 
 enddo
 
-close(FD)
 
 end subroutine xyz2Object !}}}
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!80
@@ -677,7 +716,12 @@ select case(trim(word))
     if (maxval(col).le.1) then
      write(0,*) "ERROR: Please set 'dataColumns' to read from the data file"
      error=1; return; endif
-    call xyz2Object( 12, trim(tmp), o(Nobjects) )
+    if (wc.eq.3) then
+     word2 = s_get_word(3,s); read(word2,*) k ! get line count
+     call xyz2Object( 12, trim(tmp), o(Nobjects), k )
+    else
+     call xyz2Object( 12, trim(tmp), o(Nobjects) )
+    endif
    endif
   case ("LoadBackground");
    if (.not.allocated(o)) then
